@@ -1,3 +1,4 @@
+    app.run_polling()
 import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -6,7 +7,7 @@ from database import init_db, get_connection
 
 init_db()
 
-# --------------------- قائمة الأزرار الرئيسية ---------------------
+# --------------------- قائمة الأزرار ---------------------
 def main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king_points")],
@@ -24,12 +25,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     if data == "king_points":
-        await show_king_points(update, context)
+        await show_king_points(update)
     else:
         await query.edit_message_text(f"تم اختيار: {data}")
 
 # --------------------- ملك التفاعل ---------------------
-async def show_king_points(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_king_points(update: Update):
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT name, points FROM points ORDER BY points DESC LIMIT 1")
@@ -42,15 +43,12 @@ async def show_king_points(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "لا يوجد بيانات حتى الآن"
     await update.callback_query.edit_message_text(text=text)
 
-# --------------------- بدء البوت ---------------------
+# --------------------- أمر /start ---------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat_id not in ALLOWED_GROUPS:
         await update.message.reply_text("❌ هذه المجموعة غير مسموح بها للبوت")
         return
-    await update.message.reply_text(
-        "مرحباً بك! اختر من القائمة:", 
-        reply_markup=main_menu_keyboard()
-    )
+    await update.message.reply_text("مرحباً بك! اختر من القائمة:", reply_markup=main_menu_keyboard())
 
 # --------------------- تتبع الرسائل ---------------------
 async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,7 +73,19 @@ async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row:
         await update.message.reply_text(row[0])
 
-# --------------------- نشر تلقائي ---------------------
+# --------------------- أوامر رفع وتنزيل الرتب ---------------------
+async def manage_roles(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ فقط المالك الأساسي يمكنه إدارة الرتب")
+        return
+    await update.message.reply_text("🛡️ أوامر إدارة الرتب قيد التطوير")
+
+# --------------------- القفل/الفتح ---------------------
+async def lock_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔒 القفل/الفتح قيد التطوير")
+
+# --------------------- النشر التلقائي ---------------------
 async def auto_post(context: ContextTypes.DEFAULT_TYPE):
     for group_id in ALLOWED_GROUPS:
         await context.bot.send_message(chat_id=group_id, text="📿 دعاء أو ذكر تلقائي")
