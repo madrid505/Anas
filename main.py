@@ -1,17 +1,16 @@
-    app.run_polling()
 import asyncio
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from config import TOKEN, OWNER_ID, ALLOWED_GROUPS
+from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, PROTECTED_USERS
 from database import init_db, get_connection
 
 init_db()
 
-# --------------------- قائمة الأزرار ---------------------
+# --------------------- لوحة الأزرار ---------------------
 def main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king_points")],
-        [InlineKeyboardButton("🛡️ رفع/تنزيل رتب", callback_data="manage_roles")],
+        [InlineKeyboardButton("🛡️ إدارة الرتب", callback_data="manage_roles")],
         [InlineKeyboardButton("🔒 القفل/الفتح", callback_data="lock_unlock")],
         [InlineKeyboardButton("📝 الردود", callback_data="replies")],
         [InlineKeyboardButton("📣 نشر تلقائي", callback_data="auto_post")],
@@ -26,6 +25,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "king_points":
         await show_king_points(update)
+    elif data == "manage_roles":
+        await update.callback_query.edit_message_text("🛡️ أوامر إدارة الرتب")
+    elif data == "lock_unlock":
+        await update.callback_query.edit_message_text("🔒 القفل/الفتح")
+    elif data == "replies":
+        await update.callback_query.edit_message_text("📝 إدارة الردود")
+    elif data == "auto_post":
+        await update.callback_query.edit_message_text("📣 النشر التلقائي")
     else:
         await query.edit_message_text(f"تم اختيار: {data}")
 
@@ -62,6 +69,18 @@ async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
     conn.close()
 
+# --------------------- تتبع تغيير أسماء الأعضاء ---------------------
+async def track_name_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.message.from_user
+    old_name = user.full_name
+    new_name = user.full_name
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO name_changes(user_id, old_name, new_name) VALUES(?,?,?)", (user.id, old_name, new_name))
+    conn.commit()
+    conn.close()
+    await update.message.reply_text(f"📝 تغير الاسم: {old_name} ➡️ {new_name}\nID: {user.id}")
+
 # --------------------- الردود التلقائية ---------------------
 async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -73,17 +92,21 @@ async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if row:
         await update.message.reply_text(row[0])
 
-# --------------------- أوامر رفع وتنزيل الرتب ---------------------
+# --------------------- إدارة الرتب ---------------------
 async def manage_roles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if user_id != OWNER_ID:
         await update.message.reply_text("❌ فقط المالك الأساسي يمكنه إدارة الرتب")
         return
-    await update.message.reply_text("🛡️ أوامر إدارة الرتب قيد التطوير")
+    await update.message.reply_text("🛡️ أوامر الرتب: رفع/تنزيل/تعيين الرتب")
 
-# --------------------- القفل/الفتح ---------------------
+# --------------------- القفل والفتح ---------------------
 async def lock_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔒 القفل/الفتح قيد التطوير")
+    await update.message.reply_text("🔒 القفل/الفتح لكل أنواع المحتوى")
+
+# --------------------- الحماية ---------------------
+def is_protected(user_id):
+    return user_id in PROTECTED_USERS
 
 # --------------------- النشر التلقائي ---------------------
 async def auto_post(context: ContextTypes.DEFAULT_TYPE):
@@ -102,6 +125,7 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CallbackQueryHandler(button_handler))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, auto_reply))
+app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_name_change))
 
 # --------------------- تشغيل البوت ---------------------
 if __name__ == "__main__":
