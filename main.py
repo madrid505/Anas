@@ -1,118 +1,107 @@
-# main.py
-
 import logging
-import os
 import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
-)
-from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, WELCOME_MESSAGE, POST_INTERVAL, PROTECTED_USERS
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, WELCOME_MESSAGE, PROTECTED_USERS, POST_INTERVAL
 import database as db
 
-# إعداد السجلات
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
 
-# --- وظائف مساعدة ---
+# ==========================
+# الوظائف الأساسية
+# ==========================
 
-async def start(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    if chat_id not in ALLOWED_GROUPS:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.id not in ALLOWED_GROUPS:
         return
     await update.message.reply_text(WELCOME_MESSAGE)
 
-# --- قائمة الأزرار ---
-def main_menu_keyboard():
+async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if update.effective_chat.id not in ALLOWED_GROUPS:
+        return
+    db.add_user(user.id, user.username or user.first_name)
+    db.update_message_count(user.id)
+
+async def top_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    top = db.get_top_user()
+    if top:
+        msg = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {top[0]} 👉👉\n🔥🔥 {top[1]} 🔥🔥\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
+        await update.message.reply_text(msg)
+
+# ==========================
+# الردود المخصصة
+# ==========================
+async def custom_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    reply = db.get_custom_reply(text)
+    if reply:
+        await update.message.reply_text(reply)
+
+# ==========================
+# زرائر تفاعلية
+# ==========================
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "top_user":
+        top = db.get_top_user()
+        if top:
+            msg = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {top[0]} 👉👉\n🔥🔥 {top[1]} 🔥🔥\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
+            await query.edit_message_text(msg)
+
+def main_buttons():
     keyboard = [
-        [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king")],
-        [InlineKeyboardButton("📊 كشف", callback_data="check")]
+        [InlineKeyboardButton("👑 ملك التفاعل", callback_data="top_user")],
+        # يمكن إضافة أزرار أخرى هنا
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def menu_handler(update: Update, context: CallbackContext):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "king":
-        points = db.get_points(query.from_user.id)
-        await query.edit_message_text(f"👑👑 ملك التفاعل 👑👑\n\n"
-                                      f"👈👈 {query.from_user.username} 👉👉\n"
-                                      f"🔥🔥 {points} 🔥🔥\n"
-                                      f"⭐⭐ استمر بالمشاركة يا بطل ⭐⭐")
-    elif query.data == "check":
-        info = db.get_user_info(query.from_user.id)
-        if info:
-            await query.edit_message_text(f"الاسم: {info['username']}\n"
-                                          f"عدد الرسائل: {info['messages']}\n"
-                                          f"الدولة: {info['country']}")
-        else:
-            await query.edit_message_text("لا يوجد بيانات لهذا العضو.")
-
-# --- تتبع الرسائل لملك التفاعل ---
-async def track_messages(update: Update, context: CallbackContext):
-    if update.effective_chat.id not in ALLOWED_GROUPS:
-        return
+# ==========================
+# تتبع تغيير الاسم
+# ==========================
+async def track_username_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.add_user(user.id, user.username)
-    db.increment_points(user.id)
-    db.increment_messages(user.id)
+    db.update_username(user.id, user.username or user.first_name)
+    await update.message.reply_text(
+        f"تم تغيير الاسم:\nالاسم القديم: {user.first_name}\nالاسم الجديد: {user.username}"
+    )
 
-# --- كشف ---
-async def check_command(update: Update, context: CallbackContext):
-    if update.effective_chat.id not in ALLOWED_GROUPS:
-        return
-    reply = update.message.reply_to_message
-    if reply:
-        user = reply.from_user
-        info = db.get_user_info(user.id)
-        if info:
-            await update.message.reply_text(f"الاسم: {info['username']}\n"
-                                            f"ID: {user.id}\n"
-                                            f"عدد الرسائل: {info['messages']}\n"
-                                            f"الدولة: {info['country']}")
-        else:
-            await update.message.reply_text("لا توجد بيانات لهذا العضو.")
-
-# --- تتبع تغيير الاسم ---
-async def username_tracker(update: Update, context: CallbackContext):
-    if update.effective_chat.id not in ALLOWED_GROUPS:
-        return
-    user = update.effective_user
-    db.add_user(user.id, user.username)
-
-# --- النشر التلقائي ---
-async def auto_posting(context: CallbackContext):
+# ==========================
+# النشر التلقائي
+# ==========================
+async def auto_post(context: ContextTypes.DEFAULT_TYPE):
     for group_id in ALLOWED_GROUPS:
-        await context.bot.send_message(chat_id=group_id, text="🔔 النشر التلقائي: تذكير ومحتوى مفيد 🔔")
-
-# --- إضافة معالج للنشر التلقائي كل POST_INTERVAL دقيقة ---
-async def schedule_auto_posting(app):
-    while True:
-        await auto_posting(app)
-        await asyncio.sleep(POST_INTERVAL * 60)
-
-# --- نقطة الدخول الرئيسية ---
+        await context.bot.send_message(chat_id=group_id, text="✨ تذكير تلقائي ✨\nذكر الله وحفظ الوقت!")
+        
+# ==========================
+# إعداد التطبيق والبوت
+# ==========================
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # أوامر وقائمة الأزرار
+    # أوامر
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("كشف", check_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages))
-    app.add_handler(MessageHandler(filters.StatusUpdate.USERNAME, username_tracker))
-    app.add_handler(CallbackQueryHandler(menu_handler))
+    app.add_handler(CommandHandler("ملك_التفاعل", top_user))
 
-    # بدء النشر التلقائي في الخلفية
-    app.job_queue.run_repeating(auto_posting, interval=POST_INTERVAL*60, first=10)
+    # رسائل عامة
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), track_messages))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), custom_reply))
 
-    # تشغيل البوت
-    await app.start()
-    await app.updater.start_polling()
-    await app.idle()
+    # أزرار
+    app.add_handler(CallbackQueryHandler(button_callback))
+
+    # تتبع تغيير الاسم
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_username_change))
+    
+    # جدولة النشر التلقائي كل POST_INTERVAL دقيقة
+    job_queue = app.job_queue
+    job_queue.run_repeating(auto_post, interval=POST_INTERVAL*60, first=10)
+
+    await app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
