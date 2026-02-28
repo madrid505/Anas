@@ -14,7 +14,7 @@ def init_db():
         points INTEGER DEFAULT 0
     )
     """)
-
+    
     # جدول الردود
     c.execute("""
     CREATE TABLE IF NOT EXISTS replies(
@@ -22,12 +22,21 @@ def init_db():
         response TEXT
     )
     """)
-
+    
     # جدول الرتب
     c.execute("""
     CREATE TABLE IF NOT EXISTS roles(
         user_id INTEGER PRIMARY KEY,
         role TEXT
+    )
+    """)
+    
+    # جدول لتتبع تغييرات أسماء المستخدمين
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS name_changes(
+        user_id INTEGER PRIMARY KEY,
+        old_name TEXT,
+        new_name TEXT
     )
     """)
     
