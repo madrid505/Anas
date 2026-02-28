@@ -1,5 +1,3 @@
-# config.py
-
 import os
 
 # التوكن من متغيرات البيئة على Northflank
@@ -18,8 +16,8 @@ ALLOWED_GROUPS = [
 # إعدادات قاعدة البيانات
 DATABASE_FILE = "bot_data.db"
 
-# إعدادات النشر التلقائي
-POST_INTERVAL = 15  # بالدقائق
+# إعدادات النشر التلقائي (كل 15 دقيقة)
+POST_INTERVAL = 15  
 
 # رسائل الترحيب
 WELCOME_MESSAGE = (
