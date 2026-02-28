@@ -1,24 +1,27 @@
-# database.py
 import sqlite3
-from config import DATABASE_FILE
 
-def get_connection():
-    return sqlite3.connect(DATABASE_FILE)
+DB_FILE = "bot_data.db"
 
 def init_db():
-    conn = get_connection()
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     # جدول نقاط التفاعل
-    c.execute('''CREATE TABLE IF NOT EXISTS points (
-                    user_id INTEGER PRIMARY KEY,
-                    name TEXT,
-                    points INTEGER DEFAULT 0
-                 )''')
-    # جدول الاسماء القديمة والجديدة
-    c.execute('''CREATE TABLE IF NOT EXISTS names (
-                    user_id INTEGER PRIMARY KEY,
-                    old_name TEXT,
-                    new_name TEXT
-                 )''')
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS points(
+        user_id INTEGER PRIMARY KEY,
+        name TEXT,
+        points INTEGER DEFAULT 0
+    )
+    """)
+    # جدول الردود
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS replies(
+        trigger TEXT PRIMARY KEY,
+        response TEXT
+    )
+    """)
     conn.commit()
     conn.close()
+
+def get_connection():
+    return sqlite3.connect(DB_FILE)
