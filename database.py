@@ -1,47 +1,65 @@
+# database.py
+
 import sqlite3
+from config import DATABASE_FILE
 
-DB_FILE = "bot_data.db"
+# إنشاء قاعدة البيانات إذا لم تكن موجودة
+conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+cursor = conn.cursor()
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    
-    # نقاط ملك التفاعل
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS points(
-        user_id INTEGER PRIMARY KEY,
-        name TEXT,
-        points INTEGER DEFAULT 0
-    )
-    """)
-    
-    # الردود
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS replies(
-        trigger TEXT PRIMARY KEY,
-        response TEXT
-    )
-    """)
-    
-    # الرتب
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS roles(
-        user_id INTEGER PRIMARY KEY,
-        role TEXT
-    )
-    """)
-    
-    # تتبع تغييرات الأسماء
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS name_changes(
-        user_id INTEGER PRIMARY KEY,
-        old_name TEXT,
-        new_name TEXT
-    )
-    """)
-    
+# جدول لتخزين نقاط ملك التفاعل
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS user_points (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    points INTEGER DEFAULT 0
+)
+""")
+
+# جدول لتخزين عدد الرسائل لكل عضو (للكشف)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS user_messages (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    messages_count INTEGER DEFAULT 0,
+    country TEXT DEFAULT 'غير معروف'
+)
+""")
+
+conn.commit()
+
+# دوال مساعدة
+
+def add_user(user_id: int, username: str):
+    cursor.execute("INSERT OR IGNORE INTO user_points (user_id, username) VALUES (?, ?)", (user_id, username))
+    cursor.execute("INSERT OR IGNORE INTO user_messages (user_id, username) VALUES (?, ?)", (user_id, username))
     conn.commit()
-    conn.close()
 
-def get_connection():
-    return sqlite3.connect(DB_FILE)
+def increment_points(user_id: int, points: int = 1):
+    cursor.execute("UPDATE user_points SET points = points + ? WHERE user_id = ?", (points, user_id))
+    conn.commit()
+
+def get_points(user_id: int):
+    cursor.execute("SELECT points FROM user_points WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    return result[0] if result else 0
+
+def increment_messages(user_id: int):
+    cursor.execute("UPDATE user_messages SET messages_count = messages_count + 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+def get_messages(user_id: int):
+    cursor.execute("SELECT messages_count FROM user_messages WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    return result[0] if result else 0
+
+def update_country(user_id: int, country: str):
+    cursor.execute("UPDATE user_messages SET country = ? WHERE user_id = ?", (country, user_id))
+    conn.commit()
+
+def get_user_info(user_id: int):
+    cursor.execute("SELECT username, messages_count, country FROM user_messages WHERE user_id = ?", (user_id,))
+    result = cursor.fetchone()
+    if result:
+        return {"username": result[0], "messages": result[1], "country": result[2]}
+    return None
