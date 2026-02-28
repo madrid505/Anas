@@ -1,134 +1,80 @@
-# main.py
-
-import logging
 import asyncio
-import sqlite3
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler,
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 )
-from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, DATABASE_FILE, WELCOME_MESSAGE, POST_INTERVAL
+from config import TOKEN, OWNER_ID, ALLOWED_GROUPS
+from database import init_db, get_connection
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# تهيئة قاعدة البيانات
+init_db()
 
-# =========================
-# قاعدة البيانات
-# =========================
-def init_db():
-    conn = sqlite3.connect(DATABASE_FILE)
+# قائمة الأوامر الأساسية بالزر
+def main_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king_points")],
+        [InlineKeyboardButton("🛡️ رفع/تنزيل رتب", callback_data="manage_roles")],
+        [InlineKeyboardButton("🔒 القفل/الفتح", callback_data="lock_unlock")],
+        [InlineKeyboardButton("📝 الردود", callback_data="replies")],
+        [InlineKeyboardButton("📣 نشر تلقائي", callback_data="auto_post")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# الرد على زر القائمة
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "king_points":
+        await show_king_points(update, context)
+    elif data == "manage_roles":
+        await query.edit_message_text("أوامر رفع/تنزيل الرتب هنا...")
+    elif data == "lock_unlock":
+        await query.edit_message_text("أوامر القفل والفتح هنا...")
+    elif data == "replies":
+        await query.edit_message_text("إدارة الردود هنا...")
+    elif data == "auto_post":
+        await query.edit_message_text("تم تفعيل النشر التلقائي كل 15 دقيقة")
+
+# عرض ملك التفاعل
+async def show_king_points(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = get_connection()
     c = conn.cursor()
-    # جدول نقاط التفاعل
-    c.execute('''CREATE TABLE IF NOT EXISTS points (
-                    user_id INTEGER PRIMARY KEY,
-                    name TEXT,
-                    points INTEGER DEFAULT 0
-                 )''')
-    # جدول الاسماء القديمة والجديدة
-    c.execute('''CREATE TABLE IF NOT EXISTS names (
-                    user_id INTEGER PRIMARY KEY,
-                    old_name TEXT,
-                    new_name TEXT
-                 )''')
-    conn.commit()
+    c.execute("SELECT name, points FROM points ORDER BY points DESC LIMIT 1")
+    row = c.fetchone()
     conn.close()
+    if row:
+        name, points = row
+        text = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {name} 👉👉\n🔥🔥 {points} 🔥🔥\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
+    else:
+        text = "لا يوجد بيانات حتى الآن"
+    await update.callback_query.edit_message_text(text=text)
 
-# =========================
-# أوامر الإدارة الأساسية
-# =========================
+# أمر /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id not in ALLOWED_GROUPS:
-        return
-    await update.message.reply_text("البوت شغال ✅")
+    await update.message.reply_text(
+        "مرحباً بك! اختر من القائمة:", 
+        reply_markup=main_menu_keyboard()
+    )
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "جميع الأوامر متاحة عبر الأزرار أو الكتابة\nمثال: /points لمعرفة ملك التفاعل"
-    await update.message.reply_text(text)
-
-# =========================
-# نظام ملك التفاعل
-# =========================
-async def points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = sqlite3.connect(DATABASE_FILE)
-    c = conn.cursor()
-    c.execute("SELECT user_id, name, points FROM points ORDER BY points DESC LIMIT 1")
-    row = c.fetchone()
-    conn.close()
-    if row:
-        msg = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {row[1]} 👉👉\n🔥🔥 {row[2]} 🔥🔥\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
-        await update.message.reply_text(msg)
-    else:
-        await update.message.reply_text("لا يوجد بيانات حتى الآن.")
-
-# =========================
-# الترحيب عند منادي البوت
-# =========================
-async def mention_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.id not in ALLOWED_GROUPS:
-        return
-    await update.message.reply_text(WELCOME_MESSAGE)
-
-# =========================
-# تسجيل الرسائل لملك التفاعل
-# =========================
+# تتبع الرسائل لإحتساب النقاط
 async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    name = update.effective_user.full_name
-    conn = sqlite3.connect(DATABASE_FILE)
+    user = update.message.from_user
+    conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT points FROM points WHERE user_id=?", (user_id,))
-    row = c.fetchone()
-    if row:
-        c.execute("UPDATE points SET points=points+1, name=? WHERE user_id=?", (name, user_id))
-    else:
-        c.execute("INSERT INTO points (user_id, name, points) VALUES (?, ?, ?)", (user_id, name, 1))
+    c.execute("INSERT OR IGNORE INTO points(user_id, name, points) VALUES(?,?,0)", (user.id, user.full_name))
+    c.execute("UPDATE points SET points = points + 1, name=? WHERE user_id=?", (user.full_name, user.id))
     conn.commit()
     conn.close()
 
-# =========================
-# نشر تلقائي للأذكار والادعية كل 15 دقيقة
-# =========================
-async def auto_post(application):
-    while True:
-        conn = sqlite3.connect(DATABASE_FILE)
-        c = conn.cursor()
-        # هنا تضع جدول الادعية والاذكار
-        c.execute("SELECT 'اذكار قصيرة'")  # مؤقتًا
-        post = c.fetchone()[0]
-        conn.close()
-        for group_id in ALLOWED_GROUPS:
-            try:
-                await application.bot.send_message(chat_id=group_id, text=post)
-            except Exception as e:
-                logging.error(f"خطأ بالنشر التلقائي: {e}")
-        await asyncio.sleep(POST_INTERVAL * 60)
+# إعداد التطبيق
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(button_handler))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages))
 
-# =========================
-# نقطة البداية
-# =========================
-async def main():
-    init_db()
-    application = ApplicationBuilder().token(TOKEN).build()
-
-    # Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("points", points_command))
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, track_messages))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Entity("mention"), mention_bot))
-
-    # نشر تلقائي في الخلفية
-    application.create_task(auto_post(application))
-
-    await application.run_polling()
-
+# تشغيل البوت
 if __name__ == "__main__":
-    asyncio.run(main())
+    print("البوت شغال 🚀")
+    app.run_polling()
