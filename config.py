@@ -1,14 +1,15 @@
+# config.py
 import os
 
-TOKEN = os.getenv("8509643139:AAG9r1U4FvxTV03RqiBXj9JxQEvGU2gHVNw")
+# التوكن من متغير البيئة
+TOKEN = os.getenv("TOKEN")
 
-OWNER_ID = 5010882230
-
-ALLOWED_GROUPS = [
+# قائمة مجموعات البوت
+GROUPS_ID = [
     -1002695848824,
     -1003721123319,
     -1002052564369
 ]
 
-PORT = int(os.getenv("PORT", 8000))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+# مالك البوت
+OWNER_ID = 5010882230
