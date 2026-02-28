@@ -1,134 +1,118 @@
+# main.py
+
+import logging
+import os
 import asyncio
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, PROTECTED_USERS
-from database import init_db, get_connection
+from datetime import datetime, timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+)
+from config import TOKEN, OWNER_ID, ALLOWED_GROUPS, WELCOME_MESSAGE, POST_INTERVAL, PROTECTED_USERS
+import database as db
 
-init_db()
+# إعداد السجلات
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-# --------------------- لوحة الأزرار ---------------------
+# --- وظائف مساعدة ---
+
+async def start(update: Update, context: CallbackContext):
+    chat_id = update.effective_chat.id
+    if chat_id not in ALLOWED_GROUPS:
+        return
+    await update.message.reply_text(WELCOME_MESSAGE)
+
+# --- قائمة الأزرار ---
 def main_menu_keyboard():
     keyboard = [
-        [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king_points")],
-        [InlineKeyboardButton("🛡️ إدارة الرتب", callback_data="manage_roles")],
-        [InlineKeyboardButton("🔒 القفل/الفتح", callback_data="lock_unlock")],
-        [InlineKeyboardButton("📝 الردود", callback_data="replies")],
-        [InlineKeyboardButton("📣 نشر تلقائي", callback_data="auto_post")],
+        [InlineKeyboardButton("👑 ملك التفاعل", callback_data="king")],
+        [InlineKeyboardButton("📊 كشف", callback_data="check")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# --------------------- التعامل مع الضغط على الأزرار ---------------------
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def menu_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
-    data = query.data
+    if query.data == "king":
+        points = db.get_points(query.from_user.id)
+        await query.edit_message_text(f"👑👑 ملك التفاعل 👑👑\n\n"
+                                      f"👈👈 {query.from_user.username} 👉👉\n"
+                                      f"🔥🔥 {points} 🔥🔥\n"
+                                      f"⭐⭐ استمر بالمشاركة يا بطل ⭐⭐")
+    elif query.data == "check":
+        info = db.get_user_info(query.from_user.id)
+        if info:
+            await query.edit_message_text(f"الاسم: {info['username']}\n"
+                                          f"عدد الرسائل: {info['messages']}\n"
+                                          f"الدولة: {info['country']}")
+        else:
+            await query.edit_message_text("لا يوجد بيانات لهذا العضو.")
 
-    if data == "king_points":
-        await show_king_points(update)
-    elif data == "manage_roles":
-        await update.callback_query.edit_message_text("🛡️ أوامر إدارة الرتب")
-    elif data == "lock_unlock":
-        await update.callback_query.edit_message_text("🔒 القفل/الفتح")
-    elif data == "replies":
-        await update.callback_query.edit_message_text("📝 إدارة الردود")
-    elif data == "auto_post":
-        await update.callback_query.edit_message_text("📣 النشر التلقائي")
-    else:
-        await query.edit_message_text(f"تم اختيار: {data}")
-
-# --------------------- ملك التفاعل ---------------------
-async def show_king_points(update: Update):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT name, points FROM points ORDER BY points DESC LIMIT 1")
-    row = c.fetchone()
-    conn.close()
-    if row:
-        name, points = row
-        text = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {name} 👉👉\n🔥🔥 {points} 🔥🔥\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
-    else:
-        text = "لا يوجد بيانات حتى الآن"
-    await update.callback_query.edit_message_text(text=text)
-
-# --------------------- أمر /start ---------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.chat_id not in ALLOWED_GROUPS:
-        await update.message.reply_text("❌ هذه المجموعة غير مسموح بها للبوت")
+# --- تتبع الرسائل لملك التفاعل ---
+async def track_messages(update: Update, context: CallbackContext):
+    if update.effective_chat.id not in ALLOWED_GROUPS:
         return
-    await update.message.reply_text("مرحباً بك! اختر من القائمة:", reply_markup=main_menu_keyboard())
+    user = update.effective_user
+    db.add_user(user.id, user.username)
+    db.increment_points(user.id)
+    db.increment_messages(user.id)
 
-# --------------------- تتبع الرسائل ---------------------
-async def track_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.chat_id not in ALLOWED_GROUPS:
+# --- كشف ---
+async def check_command(update: Update, context: CallbackContext):
+    if update.effective_chat.id not in ALLOWED_GROUPS:
         return
-    user = update.message.from_user
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO points(user_id, name, points) VALUES(?,?,0)", (user.id, user.full_name))
-    c.execute("UPDATE points SET points = points + 1, name=? WHERE user_id=?", (user.full_name, user.id))
-    conn.commit()
-    conn.close()
+    reply = update.message.reply_to_message
+    if reply:
+        user = reply.from_user
+        info = db.get_user_info(user.id)
+        if info:
+            await update.message.reply_text(f"الاسم: {info['username']}\n"
+                                            f"ID: {user.id}\n"
+                                            f"عدد الرسائل: {info['messages']}\n"
+                                            f"الدولة: {info['country']}")
+        else:
+            await update.message.reply_text("لا توجد بيانات لهذا العضو.")
 
-# --------------------- تتبع تغيير أسماء الأعضاء ---------------------
-async def track_name_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    old_name = user.full_name
-    new_name = user.full_name
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO name_changes(user_id, old_name, new_name) VALUES(?,?,?)", (user.id, old_name, new_name))
-    conn.commit()
-    conn.close()
-    await update.message.reply_text(f"📝 تغير الاسم: {old_name} ➡️ {new_name}\nID: {user.id}")
-
-# --------------------- الردود التلقائية ---------------------
-async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT response FROM replies WHERE trigger=?", (text,))
-    row = c.fetchone()
-    conn.close()
-    if row:
-        await update.message.reply_text(row[0])
-
-# --------------------- إدارة الرتب ---------------------
-async def manage_roles(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    if user_id != OWNER_ID:
-        await update.message.reply_text("❌ فقط المالك الأساسي يمكنه إدارة الرتب")
+# --- تتبع تغيير الاسم ---
+async def username_tracker(update: Update, context: CallbackContext):
+    if update.effective_chat.id not in ALLOWED_GROUPS:
         return
-    await update.message.reply_text("🛡️ أوامر الرتب: رفع/تنزيل/تعيين الرتب")
+    user = update.effective_user
+    db.add_user(user.id, user.username)
 
-# --------------------- القفل والفتح ---------------------
-async def lock_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔒 القفل/الفتح لكل أنواع المحتوى")
-
-# --------------------- الحماية ---------------------
-def is_protected(user_id):
-    return user_id in PROTECTED_USERS
-
-# --------------------- النشر التلقائي ---------------------
-async def auto_post(context: ContextTypes.DEFAULT_TYPE):
+# --- النشر التلقائي ---
+async def auto_posting(context: CallbackContext):
     for group_id in ALLOWED_GROUPS:
-        await context.bot.send_message(chat_id=group_id, text="📿 دعاء أو ذكر تلقائي")
+        await context.bot.send_message(chat_id=group_id, text="🔔 النشر التلقائي: تذكير ومحتوى مفيد 🔔")
 
-# --------------------- مهمة النشر كل 15 دقيقة ---------------------
-async def scheduler(app):
+# --- إضافة معالج للنشر التلقائي كل POST_INTERVAL دقيقة ---
+async def schedule_auto_posting(app):
     while True:
-        await auto_post(app)
-        await asyncio.sleep(900)  # 15 دقيقة
+        await auto_posting(app)
+        await asyncio.sleep(POST_INTERVAL * 60)
 
-# --------------------- إعداد التطبيق ---------------------
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, auto_reply))
-app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, track_name_change))
+# --- نقطة الدخول الرئيسية ---
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-# --------------------- تشغيل البوت ---------------------
+    # أوامر وقائمة الأزرار
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("كشف", check_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_messages))
+    app.add_handler(MessageHandler(filters.StatusUpdate.USERNAME, username_tracker))
+    app.add_handler(CallbackQueryHandler(menu_handler))
+
+    # بدء النشر التلقائي في الخلفية
+    app.job_queue.run_repeating(auto_posting, interval=POST_INTERVAL*60, first=10)
+
+    # تشغيل البوت
+    await app.start()
+    await app.updater.start_polling()
+    await app.idle()
+
 if __name__ == "__main__":
-    print("البوت شغال 🚀")
-    asyncio.get_event_loop().create_task(scheduler(app))
-    app.run_polling()
+    import asyncio
+    asyncio.run(main())
