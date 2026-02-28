@@ -1,36 +1,24 @@
+# database.py
 import sqlite3
+from config import DATABASE_FILE
 
-conn = sqlite3.connect("bot.db", check_same_thread=False)
-cursor = conn.cursor()
+def get_connection():
+    return sqlite3.connect(DATABASE_FILE)
 
-# جدول الرسائل (لنظام ملك التفاعل)
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS messages (
-    group_id INTEGER,
-    user_id INTEGER,
-    count INTEGER DEFAULT 0,
-    PRIMARY KEY (group_id, user_id)
-)
-""")
-
-# جدول الرتب
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS ranks (
-    group_id INTEGER,
-    user_id INTEGER,
-    rank TEXT,
-    PRIMARY KEY (group_id, user_id)
-)
-""")
-
-# جدول الردود
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS replies (
-    group_id INTEGER,
-    trigger TEXT,
-    response TEXT,
-    PRIMARY KEY (group_id, trigger)
-)
-""")
-
-conn.commit()
+def init_db():
+    conn = get_connection()
+    c = conn.cursor()
+    # جدول نقاط التفاعل
+    c.execute('''CREATE TABLE IF NOT EXISTS points (
+                    user_id INTEGER PRIMARY KEY,
+                    name TEXT,
+                    points INTEGER DEFAULT 0
+                 )''')
+    # جدول الاسماء القديمة والجديدة
+    c.execute('''CREATE TABLE IF NOT EXISTS names (
+                    user_id INTEGER PRIMARY KEY,
+                    old_name TEXT,
+                    new_name TEXT
+                 )''')
+    conn.commit()
+    conn.close()
