@@ -6,7 +6,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # جدول نقاط التفاعل
+    # نقاط ملك التفاعل
     c.execute("""
     CREATE TABLE IF NOT EXISTS points(
         user_id INTEGER PRIMARY KEY,
@@ -15,7 +15,7 @@ def init_db():
     )
     """)
     
-    # جدول الردود
+    # الردود
     c.execute("""
     CREATE TABLE IF NOT EXISTS replies(
         trigger TEXT PRIMARY KEY,
@@ -23,7 +23,7 @@ def init_db():
     )
     """)
     
-    # جدول الرتب
+    # الرتب
     c.execute("""
     CREATE TABLE IF NOT EXISTS roles(
         user_id INTEGER PRIMARY KEY,
@@ -31,7 +31,7 @@ def init_db():
     )
     """)
     
-    # جدول لتتبع تغييرات أسماء المستخدمين
+    # تتبع تغييرات الأسماء
     c.execute("""
     CREATE TABLE IF NOT EXISTS name_changes(
         user_id INTEGER PRIMARY KEY,
