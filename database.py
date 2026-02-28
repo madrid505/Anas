@@ -5,6 +5,7 @@ DB_FILE = "bot_data.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
     # جدول نقاط التفاعل
     c.execute("""
     CREATE TABLE IF NOT EXISTS points(
@@ -13,6 +14,7 @@ def init_db():
         points INTEGER DEFAULT 0
     )
     """)
+
     # جدول الردود
     c.execute("""
     CREATE TABLE IF NOT EXISTS replies(
@@ -20,6 +22,15 @@ def init_db():
         response TEXT
     )
     """)
+
+    # جدول الرتب
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS roles(
+        user_id INTEGER PRIMARY KEY,
+        role TEXT
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
