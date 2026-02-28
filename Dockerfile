@@ -1,10 +1,14 @@
+# Dockerfile
+
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt requirements.txt
+# نسخ الملفات
+COPY . /app
+
+# تثبيت المتطلبات
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-
+# تعيين الأمر الافتراضي لتشغيل البوت
 CMD ["python3", "main.py"]
