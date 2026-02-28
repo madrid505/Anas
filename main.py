@@ -1,202 +1,127 @@
-import logging
 import os
-import sqlite3
 import asyncio
-from datetime import datetime, timedelta
+import sqlite3
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler
-)
-from config import (
-    TOKEN,
-    OWNER_ID,
-    ALLOWED_GROUPS,
-    DATABASE_FILE,
-    POST_INTERVAL,
-    WELCOME_MESSAGE,
-    PROTECTED_USERS
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+
+# --- الإعدادات ---
+TOKEN = os.getenv("TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID", "5010882230"))
+
+ALLOWED_GROUPS = [
+    int(os.getenv("GROUP_1", "-1002695848824")),
+    int(os.getenv("GROUP_2", "-1003721123319")),
+    int(os.getenv("GROUP_3", "-1002052564369"))
+]
+
+DATABASE_FILE = "bot_data.db"
+POST_INTERVAL = 15  # دقائق
+
+WELCOME_MESSAGE = (
+    "🌹 ادارة قروب مونوبولي ترحب بك اهلا وسهلا 🌹\n"
+    "نحن هنا لكي نجعلك سعيدا لا تجعل اللعبة ان تلهيك عن ذكر الله\n"
+    "⛔ يمنع اللعب اثناء رفع الاذان واوقات الصلاة\n"
+    "⛔ يمنع منعا باتا التواصل مع المشرفات\n"
+    "👈 لاي استفسار يرجى التواصل مع Anas او Sakher 👉"
 )
 
-# إعداد السجلات
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+PROTECTED_USERS = [OWNER_ID]
 
-# ========================
-# قاعدة البيانات
-# ========================
-conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+# --- قاعدة البيانات ---
+conn = sqlite3.connect(DATABASE_FILE)
 cursor = conn.cursor()
-
-# إنشاء الجداول إذا لم تكن موجودة
 cursor.execute("""
-CREATE TABLE IF NOT EXISTS user_stats (
+CREATE TABLE IF NOT EXISTS user_points (
     user_id INTEGER PRIMARY KEY,
-    username TEXT,
     points INTEGER DEFAULT 0
-)
-""")
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS custom_replies (
-    keyword TEXT PRIMARY KEY,
-    reply TEXT
 )
 """)
 conn.commit()
 
-# ========================
-# وظائف مساعدة
-# ========================
-async def check_allowed_group(update: Update):
+# --- وظائف البوت ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id not in ALLOWED_GROUPS:
-        return False
-    return True
-
-async def add_point(user_id: int, username: str):
-    cursor.execute("INSERT OR IGNORE INTO user_stats (user_id, username) VALUES (?, ?)", (user_id, username))
-    cursor.execute("UPDATE user_stats SET points = points + 1, username=? WHERE user_id = ?", (username, user_id))
-    conn.commit()
-
-async def get_king_of_activity():
-    cursor.execute("SELECT username, points FROM user_stats ORDER BY points DESC LIMIT 1")
-    return cursor.fetchone()
-
-async def send_welcome(update: Update):
+        return
     await update.message.reply_text(WELCOME_MESSAGE)
 
-# ========================
-# أوامر الطرد والكتم والحظر
-# ========================
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    # تحقق من الصلاحيات
-    target = update.message.reply_to_message.from_user if update.message.reply_to_message else None
-    if target and target.id not in PROTECTED_USERS:
-        await context.bot.ban_chat_member(update.effective_chat.id, target.id)
-        await update.message.reply_text(f"تم حظر {target.full_name}")
+# فتح القائمة عند كتابة كلمة "امر"
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id not in ALLOWED_GROUPS:
+        return
+
+    user_id = update.effective_user.id
+    cursor.execute("INSERT OR IGNORE INTO user_points (user_id, points) VALUES (?,0)", (user_id,))
+    cursor.execute("UPDATE user_points SET points = points + 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+    text = update.message.text.strip().lower()
+    if text == "امر":
+        keyboard = [
+            [InlineKeyboardButton("رفع", callback_data="raise")],
+            [InlineKeyboardButton("تنزيل", callback_data="lower")],
+            [InlineKeyboardButton("اضف رد", callback_data="add_reply")],
+            [InlineKeyboardButton("كتم", callback_data="mute")],
+            [InlineKeyboardButton("طرد", callback_data="kick")],
+            [InlineKeyboardButton("تقييد", callback_data="restrict")],
+            [InlineKeyboardButton("حظر", callback_data="ban")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("اختر من القائمة:", reply_markup=reply_markup)
+
+# --- التعامل مع أزرار القائمة ---
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action = query.data
+    user_id = query.from_user.id
+
+    # حماية المالك
+    if user_id in PROTECTED_USERS and action in ["kick", "ban", "mute", "restrict"]:
+        await query.edit_message_text("⚠️ لا يمكنك تطبيق هذا الإجراء على المالك.")
+        return
+
+    # وظائف الأزرار (يمكن تعديل التفاصيل حسب الحاجة)
+    if action == "raise":
+        await query.edit_message_text("✅ تم رفع العضو.")
+    elif action == "lower":
+        await query.edit_message_text("✅ تم تنزيل العضو.")
+    elif action == "add_reply":
+        await query.edit_message_text("✅ يمكنك الآن إضافة ردود تلقائية.")
+    elif action == "mute":
+        await query.edit_message_text("✅ تم كتم العضو.")
+    elif action == "kick":
+        await query.edit_message_text("✅ تم طرد العضو.")
+    elif action == "restrict":
+        await query.edit_message_text("✅ تم تقييد العضو.")
+    elif action == "ban":
+        await query.edit_message_text("✅ تم حظر العضو.")
     else:
-        await update.message.reply_text("لا يمكن حظر هذا المستخدم")
+        await query.edit_message_text(f"⚠️ لم يتم التعرف على الإجراء: {action}")
 
-async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    target_id = context.args[0] if context.args else None
-    if target_id:
-        await context.bot.unban_chat_member(update.effective_chat.id, int(target_id))
-        await update.message.reply_text(f"تم رفع الحظر عن المستخدم {target_id}")
+# --- النشر التلقائي ---
+async def auto_post(app):
+    while True:
+        for group_id in ALLOWED_GROUPS:
+            try:
+                await app.bot.send_message(chat_id=group_id, text="📿 دعاء أو ذكر تلقائي")
+            except Exception as e:
+                print(f"Error sending to {group_id}: {e}")
+        await asyncio.sleep(POST_INTERVAL * 60)
 
-async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    target = update.message.reply_to_message.from_user if update.message.reply_to_message else None
-    if target and target.id not in PROTECTED_USERS:
-        await context.bot.restrict_chat_member(update.effective_chat.id, target.id, permissions=None)
-        await update.message.reply_text(f"تم كتم {target.full_name}")
+# --- المهام الخلفية ---
+async def scheduler(app):
+    asyncio.create_task(auto_post(app))
 
-async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    target = update.message.reply_to_message.from_user if update.message.reply_to_message else None
-    if target:
-        # إعادة الصلاحيات العادية
-        await context.bot.restrict_chat_member(update.effective_chat.id, target.id, permissions=None)
-        await update.message.reply_text(f"تم رفع الكتم عن {target.full_name}")
-
-# ========================
-# الردود المخصصة
-# ========================
-async def add_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    try:
-        keyword = context.args[0]
-        reply_text = " ".join(context.args[1:])
-        cursor.execute("INSERT OR REPLACE INTO custom_replies (keyword, reply) VALUES (?, ?)", (keyword, reply_text))
-        conn.commit()
-        await update.message.reply_text(f"تم إضافة الرد على '{keyword}'")
-    except Exception as e:
-        await update.message.reply_text(f"خطأ: {e}")
-
-async def remove_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_allowed_group(update): return
-    keyword = context.args[0] if context.args else None
-    if keyword:
-        cursor.execute("DELETE FROM custom_replies WHERE keyword=?", (keyword,))
-        conn.commit()
-        await update.message.reply_text(f"تم حذف الرد '{keyword}'")
-
-async def check_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg_text = update.message.text
-    cursor.execute("SELECT reply FROM custom_replies WHERE keyword=?", (msg_text,))
-    row = cursor.fetchone()
-    if row:
-        await update.message.reply_text(row[0])
-
-# ========================
-# ملك التفاعل (نقاط المشاركات)
-# ========================
-async def track_message(update: Update):
-    if not await check_allowed_group(update): return
-    user = update.message.from_user
-    await add_point(user.id, user.full_name)
-
-async def announce_king(context: ContextTypes.DEFAULT_TYPE):
-    king = await get_king_of_activity()
-    if king:
-        username, points = king
-        msg = f"👑👑 ملك التفاعل 👑👑\n\n👈👈 {username} 👉👉\n🔥🔥 {points} 🔥🔥\n\n⭐⭐ استمر بالمشاركة يا بطل ⭐⭐"
-        for group in ALLOWED_GROUPS:
-            await context.bot.send_message(chat_id=group, text=msg)
-
-# ========================
-# التحقق من تغيير الاسم
-# ========================
-async def monitor_username_changes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.new_chat_members:
-        for member in update.message.new_chat_members:
-            # يمكنك إضافة قاعدة بيانات للاحتفاظ بالاسم القديم
-            pass
-
-# ========================
-# النشر التلقائي
-# ========================
-async def auto_post(context: ContextTypes.DEFAULT_TYPE):
-    messages = [
-        "✨ دعاء اليوم ✨",
-        "📿 تسبيح ✨",
-        "📖 حديث شريف ✨",
-        "💡 حكمة وموعظة ✨"
-    ]
-    msg = messages[datetime.utcnow().minute % len(messages)]
-    for group in ALLOWED_GROUPS:
-        await context.bot.send_message(chat_id=group, text=msg)
-
-# ========================
-# بدء التطبيق
-# ========================
+# --- تشغيل البوت ---
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Handlers
-    app.add_handler(CommandHandler("start", send_welcome))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_message))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_reply))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), message_handler))
+    app.add_handler(CallbackQueryHandler(button_handler))
 
-    # أوامر الإدارة
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("unban", unban))
-    app.add_handler(CommandHandler("mute", mute))
-    app.add_handler(CommandHandler("unmute", unmute))
-    app.add_handler(CommandHandler("add_reply", add_reply))
-    app.add_handler(CommandHandler("remove_reply", remove_reply))
-
-    # النشر التلقائي كل POST_INTERVAL دقيقة
-    app.job_queue.run_repeating(auto_post, interval=POST_INTERVAL*60, first=10)
-    # ملك التفاعل كل أسبوع
-    app.job_queue.run_repeating(announce_king, interval=7*24*60*60, first=15)
-
+    asyncio.create_task(scheduler(app))
     await app.run_polling()
 
 if __name__ == "__main__":
