@@ -1,4 +1,3 @@
-
 import os
 
 # التوكن من متغيرات البيئة على Northflank
