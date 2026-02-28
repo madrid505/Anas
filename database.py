@@ -1,75 +1,66 @@
 import sqlite3
+from contextlib import closing
 from config import DATABASE_FILE
 
 # إنشاء قاعدة البيانات إذا لم تكن موجودة
-conn = sqlite3.connect(DATABASE_FILE)
-cursor = conn.cursor()
+def init_db():
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        with conn:
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_points (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                points INTEGER DEFAULT 0
+            )
+            """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages_log (
+                message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                chat_id INTEGER,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS custom_replies (
+                keyword TEXT PRIMARY KEY,
+                reply TEXT
+            )
+            """)
 
-# جدول المستخدمين لتتبع النقاط والمشاركة
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    points INTEGER DEFAULT 0,
-    message_count INTEGER DEFAULT 0,
-    country TEXT DEFAULT 'غير معروف'
-)
-''')
+# إضافة نقاط لمستخدم
+def add_point(user_id, username, points=1):
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        with conn:
+            cur = conn.execute("SELECT points FROM user_points WHERE user_id=?", (user_id,))
+            row = cur.fetchone()
+            if row:
+                conn.execute("UPDATE user_points SET points=points+? WHERE user_id=?", (points, user_id))
+            else:
+                conn.execute("INSERT INTO user_points (user_id, username, points) VALUES (?, ?, ?)", (user_id, username, points))
 
-# جدول للردود المخصصة
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS custom_replies (
-    trigger TEXT PRIMARY KEY,
-    response TEXT
-)
-''')
+# الحصول على نقاط المستخدم
+def get_points(user_id):
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        cur = conn.execute("SELECT points FROM user_points WHERE user_id=?", (user_id,))
+        row = cur.fetchone()
+        return row[0] if row else 0
 
-# جدول لتخزين آخر الأسماء لتتبع التغيير
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS username_history (
-    user_id INTEGER PRIMARY KEY,
-    old_username TEXT,
-    new_username TEXT
-)
-''')
+# تسجيل رسالة جديدة للعضو
+def log_message(user_id, chat_id):
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        with conn:
+            conn.execute("INSERT INTO messages_log (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
 
-conn.commit()
+# إضافة رد مخصص
+def add_reply(keyword, reply):
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        with conn:
+            conn.execute("INSERT OR REPLACE INTO custom_replies (keyword, reply) VALUES (?, ?)", (keyword, reply))
 
-# دوال مساعدة للتعامل مع قاعدة البيانات
-
-def add_user(user_id, username, country='غير معروف'):
-    cursor.execute('''
-        INSERT OR IGNORE INTO users (user_id, username, country) VALUES (?, ?, ?)
-    ''', (user_id, username, country))
-    conn.commit()
-
-def update_message_count(user_id):
-    cursor.execute('''
-        UPDATE users SET message_count = message_count + 1, points = points + 1 WHERE user_id = ?
-    ''', (user_id,))
-    conn.commit()
-
-def get_top_user():
-    cursor.execute('SELECT username, points FROM users ORDER BY points DESC LIMIT 1')
-    return cursor.fetchone()
-
-def set_custom_reply(trigger, response):
-    cursor.execute('''
-        INSERT OR REPLACE INTO custom_replies (trigger, response) VALUES (?, ?)
-    ''', (trigger, response))
-    conn.commit()
-
-def get_custom_reply(trigger):
-    cursor.execute('SELECT response FROM custom_replies WHERE trigger = ?', (trigger,))
-    row = cursor.fetchone()
-    return row[0] if row else None
-
-def update_username(user_id, new_username):
-    cursor.execute('SELECT username FROM users WHERE user_id = ?', (user_id,))
-    old_username = cursor.fetchone()
-    if old_username:
-        cursor.execute('''
-            INSERT OR REPLACE INTO username_history (user_id, old_username, new_username) VALUES (?, ?, ?)
-        ''', (user_id, old_username[0], new_username))
-        cursor.execute('UPDATE users SET username = ? WHERE user_id = ?', (new_username, user_id))
-        conn.commit()
+# الحصول على الردود
+def get_reply(keyword):
+    with closing(sqlite3.connect(DATABASE_FILE)) as conn:
+        cur = conn.execute("SELECT reply FROM custom_replies WHERE keyword=?", (keyword,))
+        row = cur.fetchone()
+        return row[0] if row else None
