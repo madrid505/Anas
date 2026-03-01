@@ -1,10 +1,10 @@
 from telethon import events, Button
 from database import db
-import main  # الوصول لـ client و check_privilege
+import main 
 
-# --- معالج الضغط على الأزرار (Callback Queries) ---
 @main.client.on(events.CallbackQuery)
 async def callback_handler(event):
+    # تحويل البيانات القادمة من الزر إلى نص
     data = event.data.decode('utf-8')
     gid = str(event.chat_id)
     
@@ -13,65 +13,89 @@ async def callback_handler(event):
         await event.answer("⚠️ عذراً، هذه اللوحة مخصصة للمدراء فقط!", alert=True)
         return
 
-    # --- القائمة الرئيسية ---
+    # --- القائمة الرئيسية (Main Menu) ---
     if data == "show_main":
         btns = [
             [Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
             [Button.inline("⚙️ الإعدادات", "show_settings"), Button.inline("❌ إغلاق", "close")]
         ]
-        await event.edit("⬇️ **لوحة تحكم بوت الأساطير (نظام TON):**", buttons=btns)
+        await event.edit("⬇️ **لوحة تحكم بوت الأساطير (نظام TON المتكامل):**", buttons=btns)
 
-    # --- قائمة الحماية (الأقفال) ---
+    # --- قائمة الحماية والأقفال (Locks Menu) ---
     elif data == "show_locks":
-        # عرض حالة الأقفال الحالية بجانب كل زر
-        def get_stat(feat): return "🔒" if db.is_locked(gid, feat) else "🔓"
+        # وظيفة داخلية لجلب حالة القفل (قفل/فتح)
+        links_s = "🔒" if db.is_locked(gid, "links") else "🔓"
+        users_s = "🔒" if db.is_locked(gid, "usernames") else "🔓"
+        photo_s = "🔒" if db.is_locked(gid, "photos") else "🔓"
+        stick_s = "🔒" if db.is_locked(gid, "stickers") else "🔓"
+        forw_s = "🔒" if db.is_locked(gid, "forward") else "🔓"
+        video_s = "🔒" if db.is_locked(gid, "videos") else "🔓"
         
         btns = [
-            [Button.inline(f"{get_stat('links')} الروابط", "toggle_links"), Button.inline(f"{get_stat('usernames')} المعرفات", "toggle_usernames")],
-            [Button.inline(f"{get_stat('photos')} الصور", "toggle_photos"), Button.inline(f"{get_stat('stickers')} الملصقات", "toggle_stickers")],
-            [Button.inline(f"{get_stat('forward')} التوجيه", "toggle_forward"), Button.inline(f"{get_stat('videos')} الفيديوهات", "toggle_videos")],
+            [Button.inline(f"{links_s} الروابط", "tg_links"), Button.inline(f"{users_s} المعرفات", "tg_usernames")],
+            [Button.inline(f"{photo_s} الصور", "tg_photos"), Button.inline(f"{stick_s} الملصقات", "tg_stickers")],
+            [Button.inline(f"{forw_s} التوجيه", "tg_forward"), Button.inline(f"{video_s} الفيديوهات", "tg_videos")],
             [Button.inline("⬅️ رجوع", "show_main")]
         ]
-        await event.edit("🔐 **إعدادات الحماية والأقفال:**\n(اضغط على الزر لتغيير الحالة)", buttons=btns)
+        await event.edit("🔐 **إعدادات الحماية والأقفال:**\n(اضغط على الزر لتغيير الحالة مباشرة)", buttons=btns)
 
-    # --- منطق تبديل الأقفال (Toggle) ---
-    elif data.startswith("toggle_"):
-        feature = data.replace("toggle_", "")
-        current_status = db.is_locked(gid, feature)
-        new_status = 0 if current_status else 1
-        db.toggle_lock(gid, feature, new_status)
-        # تحديث القائمة فوراً لإظهار التغيير
-        await callback_handler(event) # إعادة استدعاء الدالة لتحديث الأزرار
+    # --- منطق تبديل الأقفال (Toggle Logic) ---
+    elif data.startswith("tg_"):
+        feature = data.replace("tg_", "")
+        
+        # إذا كان الزر خاص بالترحيب
+        if feature == "welcome":
+            curr_w = db.get_setting(gid, "welcome_status")
+            new_w = "off" if curr_w == "on" else "on"
+            db.set_setting(gid, "welcome_status", new_w)
+            # تحديث قائمة الإعدادات فوراً
+            w_stat = "✅ مفعل" if new_w == "on" else "❌ معطل"
+            btns_w = [[Button.inline(f"نظام الترحيب: {w_stat}", "tg_welcome")], [Button.inline("⬅️ رجوع", "show_main")]]
+            await event.edit("⚙️ **إعدادات البوت العامة:**", buttons=btns_w)
+        
+        # إذا كان الزر خاص بالأقفال ميديا/روابط
+        else:
+            current_l = db.is_locked(gid, feature)
+            db.toggle_lock(gid, feature, 0 if current_l else 1)
+            # تحديث قائمة الأقفال فوراً لإظهار الرموز الجديدة
+            l_s = "🔒" if db.is_locked(gid, "links") else "🔓"
+            u_s = "🔒" if db.is_locked(gid, "usernames") else "🔓"
+            p_s = "🔒" if db.is_locked(gid, "photos") else "🔓"
+            s_s = "🔒" if db.is_locked(gid, "stickers") else "🔓"
+            f_s = "🔒" if db.is_locked(gid, "forward") else "🔓"
+            v_s = "🔒" if db.is_locked(gid, "videos") else "🔓"
+            
+            btns_l = [
+                [Button.inline(f"{l_s} الروابط", "tg_links"), Button.inline(f"{u_s} المعرفات", "tg_usernames")],
+                [Button.inline(f"{p_s} الصور", "tg_photos"), Button.inline(f"{s_s} الملصقات", "tg_stickers")],
+                [Button.inline(f"{f_s} التوجيه", "tg_forward"), Button.inline(f"{v_s} الفيديوهات", "tg_videos")],
+                [Button.inline("⬅️ رجوع", "show_main")]
+            ]
+            await event.edit("🔐 **إعدادات الحماية والأقفال:**", buttons=btns_l)
 
-    # --- قائمة الرتب (عرض توضيحي) ---
+    # --- قائمة معلومات الرتب ---
     elif data == "show_ranks":
-        ranks_info = (
-            "🎖️ **نظام الرتب في البوت:**\n"
+        ranks_text = (
+            "🎖️ **نظام الرتب والصلاحيات:**\n"
             "━━━━━━━━━━━━━━\n"
-            "👑 **المالك:** صلاحيات كاملة + رفع المدراء.\n"
-            "🎖️ **المدير:** التحكم بالأقفال والطرد والمنشن.\n"
-            "🛡️ **الادمن:** الحظر والكتم والتقييد.\n"
-            "✨ **المميز:** تخطي كافة أقفال الحماية.\n"
+            "👑 **المالك:** تحكم مطلق في كل شيء.\n"
+            "🎖️ **المدير:** تحكم بالأقفال والترحيب والمنشن.\n"
+            "🛡️ **الادمن:** صلاحيات الحظر والكتم والطرد.\n"
+            "✨ **المميز:** لا يتأثر بأقفال الحماية (صور، روابط..).\n"
             "━━━━━━━━━━━━━━"
         )
-        await event.edit(ranks_info, buttons=[[Button.inline("⬅️ رجوع", "show_main")]])
+        await event.edit(ranks_text, buttons=[[Button.inline("⬅️ رجوع", "show_main")]])
 
-    # --- قائمة الإعدادات ---
+    # --- قائمة الإعدادات العامة ---
     elif data == "show_settings":
-        w_stat = "✅ مفعل" if db.get_setting(gid, "welcome_status") == "on" else "❌ معطل"
-        btns = [
-            [Button.inline(f"الترحيب: {w_stat}", "toggle_welcome")],
+        current_welcome = db.get_setting(gid, "welcome_status")
+        w_label = "✅ مفعل" if current_welcome == "on" else "❌ معطل"
+        btns_s = [
+            [Button.inline(f"نظام الترحيب: {w_label}", "tg_welcome")],
             [Button.inline("⬅️ رجوع", "show_main")]
         ]
-        await event.edit("⚙️ **إعدادات البوت العامة:**", buttons=btns)
+        await event.edit("⚙️ **إعدادات البوت العامة:**", buttons=btns_s)
 
-    # --- تبديل حالة الترحيب ---
-    elif data == "toggle_welcome":
-        current = db.get_setting(gid, "welcome_status")
-        new_val = "off" if current == "on" else "on"
-        db.set_setting(gid, "welcome_status", new_val)
-        await callback_handler(event)
-
-    # --- إغلاق اللوحة ---
+    # --- إغلاق اللوحة وحذف الرسالة ---
     elif data == "close":
         await event.delete()
