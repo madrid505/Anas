@@ -4,28 +4,32 @@ class Database:
     def __init__(self, db_name="bot_database.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.cursor = self.conn.cursor()
-        self.create_tables()
+        self.setup()
 
-    def create_tables(self):
-        # جدول الردود
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT)')
-        # جدول الترحيب
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS welcome (gid TEXT, msg TEXT)')
-        # جدول مراقبة الأسماء
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS users (uid TEXT, name TEXT, username TEXT)')
-        # جدول الإنذارات
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS warns (uid TEXT, gid TEXT, count INTEGER DEFAULT 0)')
-        # جدول إعدادات القفل (الروابط، الصور، إلخ)
+    def setup(self):
+        # جدول الرتب (منشئ، مدير، مميز)
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
+        # جدول الإعدادات (قفل الروابط، الصور، الخ)
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, feature TEXT, status TEXT DEFAULT "open")')
+        # جدول الردود والترحيب
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT)')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS welcome (gid TEXT, msg TEXT)')
         self.conn.commit()
 
-    def set_welcome(self, gid, msg):
-        self.cursor.execute("INSERT OR REPLACE INTO welcome VALUES (?, ?)", (str(gid), msg))
+    def set_rank(self, gid, uid, rank):
+        self.cursor.execute("INSERT OR REPLACE INTO ranks VALUES (?, ?, ?)", (str(gid), str(uid), rank))
         self.conn.commit()
 
-    def get_welcome(self, gid):
-        self.cursor.execute("SELECT msg FROM welcome WHERE gid=?", (str(gid),))
-        row = self.fetchone()
-        return row[0] if row else None
+    def get_rank(self, gid, uid):
+        self.cursor.execute("SELECT rank FROM ranks WHERE gid=? AND uid=?", (str(gid), str(uid)))
+        row = self.cursor.fetchone()
+        return row[0] if row else "عضو"
 
-    # دوال إضافية للردود والتحذيرات يتم استدعاؤها في main.py
+    def set_setting(self, gid, feature, status):
+        self.cursor.execute("INSERT OR REPLACE INTO settings VALUES (?, ?, ?)", (str(gid), feature, status))
+        self.conn.commit()
+
+    def get_setting(self, gid, feature):
+        self.cursor.execute("SELECT status FROM settings WHERE gid=? AND feature=?", (str(gid), feature))
+        row = self.cursor.fetchone()
+        return row[0] if row else "open"
