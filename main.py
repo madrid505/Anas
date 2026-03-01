@@ -1,113 +1,103 @@
 import asyncio
-import sqlite3
 import logging
-from telethon import TelegramClient, events, functions, types
-from telethon.tl.types import ChannelParticipantsAdmins
+from telethon import TelegramClient, events, types
+from database_handler import Database
 
-# --- الإعدادات (تم دمج بياناتك) ---
-API_ID = '25736711' # يمكنك تحديثه من my.telegram.org إذا لزم
+# --- البيانات الخاصة بك ---
+API_ID = '25736711'
 API_HASH = '809081e792461f52b8265a73e13d5b00'
 BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
-logging.basicConfig(level=logging.INFO)
-client = TelegramClient('SuperBot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+db = Database()
+client = TelegramClient('SuperAdminBot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# --- إعداد قاعدة البيانات ---
-db = sqlite3.connect('bot_database.db')
-cursor = db.cursor()
-cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT)')
-cursor.execute('CREATE TABLE IF NOT EXISTS users (uid TEXT, name TEXT, username TEXT)')
-cursor.execute('CREATE TABLE IF NOT EXISTS warns (uid TEXT, gid TEXT, count INTEGER DEFAULT 0)')
-cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, feature TEXT, status TEXT DEFAULT "open")')
-db.commit()
-
-# --- دوال التحقق ---
-async def check_admin(event):
+async def is_admin(event):
     if event.sender_id == OWNER_ID: return True
     if event.chat_id not in ALLOWED_GROUPS: return False
     perms = await client.get_permissions(event.chat_id, event.sender_id)
     return perms.is_admin or perms.is_creator
 
-# --- مراقب تغيير الأسماء ---
+# --- نظام الترحيب التلقائي ---
+@client.on(events.ChatAction)
+async def welcome_handler(event):
+    if event.user_joined or event.user_added:
+        welcome_msg = db.get_welcome(event.chat_id)
+        if welcome_msg:
+            user = await event.get_user()
+            final_msg = welcome_msg.replace("الاسم", user.first_name).replace("الاي دي", str(user.id))
+            await event.respond(final_msg)
+
+# --- نظام مراقبة تغيير الهوية ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def identity_monitor(event):
+async def identity_check(event):
     user = await event.get_sender()
     if not user or not isinstance(user, types.User): return
-    uid, cur_name = str(user.id), f"{user.first_name or ''} {user.last_name or ''}".strip()
-    cur_un = f"@{user.username}" if user.username else "لا يوجد"
+    uid, name = str(user.id), f"{user.first_name or ''} {user.last_name or ''}".strip()
+    un = f"@{user.username}" if user.username else "لا يوجد"
     
-    cursor.execute("SELECT name, username FROM users WHERE uid=?", (uid,))
-    row = cursor.fetchone()
-    if row:
-        old_n, old_un = row
-        if old_n != cur_name or old_un != cur_un:
-            await event.respond(f"🔍 **تنبيه تغيير بيانات:**\n👤 القديم: {old_n} ({old_un})\n✅ الجديد: {cur_name} ({cur_un})\n🆔 ID: `{uid}`")
-            cursor.execute("UPDATE users SET name=?, username=? WHERE uid=?", (cur_name, cur_un, uid))
-    else:
-        cursor.execute("INSERT INTO users VALUES (?, ?, ?)", (uid, cur_name, cur_un))
-    db.commit()
+    db.cursor.execute("SELECT name, username FROM users WHERE uid=?", (uid,))
+    row = db.cursor.fetchone()
+    if row and (row[0] != name or row[1] != un):
+        await event.respond(f"🔍 **تغيير بيانات:**\n👤 من: {row[0]} ({row[1]})\n✅ إلى: {name} ({un})\n🆔: `{uid}`")
+        db.cursor.execute("UPDATE users SET name=?, username=? WHERE uid=?", (name, un, uid))
+    elif not row:
+        db.cursor.execute("INSERT INTO users VALUES (?, ?, ?)", (uid, name, un))
+    db.conn.commit()
 
-# --- معالج الأوامر العربية ---
+# --- معالج الأوامر العربية الشامل ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def manager(event):
+async def main_controller(event):
     msg = event.raw_text
-    chat_id = str(event.chat_id)
-    
-    # الردود التلقائية
-    cursor.execute("SELECT reply FROM replies WHERE gid=? AND word=?", (chat_id, msg))
-    rep = cursor.fetchone()
-    if rep: await event.respond(rep[0])
+    gid = str(event.chat_id)
 
-    if not await check_admin(event): return
+    # ردود تلقائية
+    db.cursor.execute("SELECT reply FROM replies WHERE gid=? AND word=?", (gid, msg))
+    res = db.cursor.fetchone()
+    if res: await event.respond(res[0])
+
+    if not await is_admin(event): return
 
     # أوامر الإدارة بالرد
     if event.is_reply:
         reply_msg = await event.get_reply_message()
-        target_id = reply_msg.sender_id
+        tid = reply_msg.sender_id
         
-        if msg == "طرد":
-            await client.kick_participant(event.chat_id, target_id)
-            await event.respond("✅ تم الطرد")
-        elif msg == "حظر":
-            await client.edit_permissions(event.chat_id, target_id, view_messages=False)
-            await event.respond("🚫 تم الحظر")
-        elif msg == "كتم":
-            await client.edit_permissions(event.chat_id, target_id, send_messages=False)
-            await event.respond("🔇 تم الكتم")
-        elif msg == "تقييد":
-            await client.edit_permissions(event.chat_id, target_id, send_messages=False, send_media=False)
-            await event.respond("⚠️ تم التقييد")
-        elif msg in ["الغاء الحظر", "الغاء الطرد", "الغاء الكتم", "الغاء التقييد", "رفع القيود"]:
-            await client.edit_permissions(event.chat_id, target_id, view_messages=True, send_messages=True, send_media=True)
+        if msg == "طرد": await client.kick_participant(event.chat_id, tid); await event.respond("✅ تم الطرد")
+        elif msg == "حظر": await client.edit_permissions(event.chat_id, tid, view_messages=False); await event.respond("🚫 تم الحظر")
+        elif msg == "كتم": await client.edit_permissions(event.chat_id, tid, send_messages=False); await event.respond("🔇 تم الكتم")
+        elif msg == "تقييد": await client.edit_permissions(event.chat_id, tid, send_messages=False, send_media=False); await event.respond("⚠️ تم التقييد")
+        elif msg in ["الغاء الحظر", "الغاء الكتم", "رفع القيود"]: 
+            await client.edit_permissions(event.chat_id, tid, view_messages=True, send_messages=True, send_media=True)
             await event.respond("✅ تم رفع القيود")
-        elif msg == "تثبيت":
-            await client.pin_from_id(event.chat_id, reply_msg.id)
-            await event.respond("📌 تم التثبيت")
-        elif msg == "كشف":
-            u = await client.get_entity(target_id)
-            await event.respond(f"🆔 ID: `{u.id}`\n👤 الاسم: {u.first_name}\n🔗 اليوزر: @{u.username}")
+        elif msg == "تثبيت": await client.pin_from_id(event.chat_id, reply_msg.id); await event.respond("📌 تم التثبيت")
+        elif msg == "انذار":
+            db.cursor.execute("UPDATE warns SET count = count + 1 WHERE uid=? AND gid=?", (str(tid), gid))
+            # منطق الإنذارات هنا...
+            await event.respond("⚠️ تم تسجيل إنذار للعضو")
 
-    # أوامر عامة
-    if msg == "تاك":
+    # أوامر الإعدادات
+    if msg.startswith("اضف ترحيب "):
+        txt = msg.replace("اضف ترحيب ", "")
+        db.set_welcome(gid, txt)
+        await event.respond("✅ تم حفظ رسالة الترحيب")
+    
+    elif msg == "تاك":
         users = await client.get_participants(event.chat_id)
         mentions = [f"[\u2063](tg://user?id={u.id})" for u in users if not u.bot]
         for i in range(0, len(mentions), 5):
-            await event.respond("📣 منشن عام: " + "".join(mentions[i:i+5]))
+            await event.respond("📣 منشن للجميع: " + "".join(mentions[i:i+5]))
             await asyncio.sleep(1)
-    
-    elif msg.startswith("اضف رد "):
-        _, word, r = msg.split(" ", 2)
-        cursor.execute("INSERT INTO replies VALUES (?, ?, ?)", (chat_id, word, r))
-        db.commit()
-        await event.respond(f"✅ تم حفظ الرد لـ: {word}")
 
-    elif msg == "قفل الروابط":
-        cursor.execute("INSERT OR REPLACE INTO settings VALUES (?, 'links', 'close')", (chat_id,))
-        db.commit()
-        await event.respond("🔒 تم قفل الروابط")
+    elif msg == "قفل الدردشة":
+        await client.edit_permissions(event.chat_id, send_messages=False)
+        await event.respond("🔒 تم قفل الدردشة للجميع")
 
-# --- تشغيل ---
+    elif msg == "فتح الدردشة":
+        await client.edit_permissions(event.chat_id, send_messages=True)
+        await event.respond("🔓 تم فتح الدردشة للجميع")
+
+# --- التشغيل ---
 print("البوت يعمل بنجاح...")
 client.run_until_disconnected()
