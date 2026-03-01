@@ -1,8 +1,8 @@
-# الإعدادات الأساسية والحماية
+# config.py
 TOKEN = "8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ"
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
-# أوقات النشر
-BROADCAST_INTERVAL = 15  # دقائق
-WEEKLY_DELAY = 604800    # ثواني (أسبوع)
+# أوقات النشر والجوائز
+ADHKAR_INTERVAL = 900  # 15 دقيقة
+WEEKLY_TIME = 604800   # أسبوع كامل
