@@ -1,15 +1,16 @@
 from telethon import events, Button
 from database import db
-import main 
+# التعديل الجوهري لمنع تكرار فتح الجلسة وتعليق القاعدة
+from __main__ import client, check_privilege 
 
-@main.client.on(events.CallbackQuery)
+@client.on(events.CallbackQuery)
 async def callback_handler(event):
     # تحويل البيانات القادمة من الزر إلى نص
     data = event.data.decode('utf-8')
     gid = str(event.chat_id)
     
     # 1. التحقق من الصلاحية (يسمح فقط للمدير فأعلى بالتحكم بالأزرار)
-    if not await main.check_privilege(event, "مدير"):
+    if not await check_privilege(event, "مدير"):
         await event.answer("⚠️ عذراً، هذه اللوحة مخصصة للمدراء فقط!", alert=True)
         return
 
