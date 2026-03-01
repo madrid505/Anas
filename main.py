@@ -1,61 +1,75 @@
+import random
 import re
 from telethon import TelegramClient, events, Button
 from database import db
+# استيراد الموديولات المنفصلة
+import ranks, locks, tag, callbacks 
 
-# بياناتك المعتمدة
+# --- بيانات الاعتماد الخاصة بك ---
 API_ID = '33183154'
 API_HASH = 'ccb195afa05973cf544600ad3c313b84'
 BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
-client = TelegramClient('TonClone', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+client = TelegramClient('AnasBot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# دالة التحقق من الصلاحيات (نفس نظام تون)
-async def check_privilege(event, required_rank):
-    if event.sender_id == OWNER_ID: return True
-    user_rank = db.get_rank(event.chat_id, event.sender_id)
-    ranks_order = {"عضو": 0, "مميز": 1, "ادمن": 2, "مدير": 3, "مالك": 4, "المنشئ": 5}
-    return ranks_order.get(user_rank, 0) >= ranks_order.get(required_rank, 0)
+# --- نظام الردود العشوائية (مثل تون) ---
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS, pattern="^بوت$"))
+async def bot_random_replies(event):
+    replies = [
+        "هلا عيني، تفضل؟ 🌹",
+        "البوت في خدمتك يا مدير. 🫡",
+        "نعم، من ينادي؟ 🤔",
+        "لبيه! اؤمرني بشيء؟ ✨",
+        "معك بوت الحماية المتكامل، كيف أساعدك؟ 🛡️"
+    ]
+    await event.reply(random.choice(replies))
 
-# --- أوامر الإدارة الذكية (Regex) ---
+# --- نظام الترحيب التلقائي ---
+@client.on(events.ChatAction)
+async def welcome_handler(event):
+    if event.user_joined or event.user_added:
+        # التحقق إذا كان الترحيب مفعلاً في المجموعة
+        if db.get_setting(str(event.chat_id), "welcome_status") == "on":
+            user = await event.get_user()
+            welcome_msg = db.get_welcome(str(event.chat_id)) or "نورت المجموعة يا {الاسم}"
+            final_msg = welcome_msg.replace("{الاسم}", user.first_name).replace("{الاي دي}", str(user.id))
+            await event.respond(final_msg)
+
+# --- أوامر الإدارة العامة (تثبيت، ردود، كشف) ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def admin_handler(event):
+async def general_admin_commands(event):
     msg = event.raw_text
     gid = str(event.chat_id)
-
-    # فتح قائمة الأوامر (امر)
-    if msg == "امر":
-        btns = [
-            [Button.inline("🔒 الأقفال", b"show_locks"), Button.inline("🎖️ الرتب", b"show_ranks")],
-            [Button.inline("⚙️ الإعدادات", b"show_settings"), Button.inline("🧹 التنظيف", b"show_clean")],
-            [Button.inline("❌ إغلاق القائمة", b"close_menu")]
-        ]
-        await event.respond("⬇️ **لوحة تحكم الإدارة (نسخة TON):**", buttons=btns)
-
-    # نظام الرفع والتنزيل (Regex)
-    if event.is_reply:
-        reply = await event.get_reply_message()
-        uid = str(reply.sender_id)
-        
-        if re.match(r"^(رفع مدير|ارفع مدير)$", msg) and await check_privilege(event, "مالك"):
-            db.set_rank(gid, uid, "مدير")
-            await event.respond("🎖️ تم رفع العضو **مديراً** في البوت")
-            
-        elif re.match(r"^(تنزيل|طرد)$", msg) and await check_privilege(event, "ادمن"):
-            # تنفيذ الطرد أو تنزيل الرتبة
-            pass
-
-# --- نظام الحماية التلقائي (Automatic Handlers) ---
-@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def protection_handler(event):
-    if await check_privilege(event, "مميز"): return # المميز لا يطبق عليه الحظر
     
-    gid = str(event.chat_id)
-    # حماية الروابط والمعرفات
-    if db.is_locked(gid, "links") and re.search(r'(https?://\S+|t\.me/\S+|@\S+)', event.raw_text):
-        await event.delete()
+    # التحقق من الرتبة (مدير أو أعلى)
+    user_rank = db.get_rank(gid, event.sender_id)
+    if user_rank not in ["مدير", "مالك", "المنشئ"] and event.sender_id != OWNER_ID:
+        return
+
+    # التثبيت وإلغاء التثبيت
+    if msg == "تثبيت" and event.is_reply:
+        reply = await event.get_reply_message()
+        await client.pin_from_id(event.chat_id, reply.id)
+        await event.respond("📌 تم تثبيت الرسالة بنجاح")
+    
+    elif msg == "الغاء التثبيت":
+        await client.unpin_from_id(event.chat_id)
+        await event.respond("🔓 تم إلغاء التثبيت")
+
+    # إضافة رد ومسح رد
+    elif msg.startswith("اضف رد "):
+        parts = msg.split(" ", 2)
+        if len(parts) == 3:
+            db.set_reply(gid, parts[1], parts[2])
+            await event.respond(f"✅ تم إضافة الرد للكلمة: {parts[1]}")
+
+    elif msg.startswith("مسح رد "):
+        word = msg.replace("مسح رد ", "")
+        db.delete_reply(gid, word)
+        await event.respond(f"🗑️ تم حذف الرد للكلمة: {word}")
 
 # تشغيل البوت
-print("--- سورس بوت تون يعمل الآن بنجاح ---")
+print("--- سورس TON المطور يعمل الآن بكافة الموديولات ---")
 client.run_until_disconnected()
