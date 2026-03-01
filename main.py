@@ -4,17 +4,17 @@ import asyncio
 from telethon import TelegramClient, events, Button, types
 from database import db
 
-# --- بيانات الاعتماد الخاصة بك ---
-API_ID = '25736711'
-API_HASH = '809081e792461f52b8265a73e13d5b00'
+# --- بيانات الاعتماد الجديدة والمصححة ---
+API_ID = 33183154
+API_HASH = 'ccb195afa05973cf544600ad3c313b84'
 BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
-# تشغيل البوت بجلسة فريدة لضمان استقرار قاعدة البيانات
-client = TelegramClient('AnasMegaSession', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+# بدء تشغيل العميل
+client = TelegramClient('AnasFinalSessionV2', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# --- دالة التحقق من الرتبة عالمياً ---
+# دالة التحقق من الرتبة عالمياً
 async def check_privilege(event, required_rank):
     if event.sender_id == OWNER_ID:
         return True
@@ -22,90 +22,91 @@ async def check_privilege(event, required_rank):
     ranks_order = {"عضو": 0, "مميز": 1, "ادمن": 2, "مدير": 3, "مالك": 4, "المنشئ": 5}
     return ranks_order.get(user_rank, 0) >= ranks_order.get(required_rank, 0)
 
-# --- 1. نظام الردود العشوائية عند مناداة "بوت" ---
+# الرد التلقائي عند مناداة "بوت"
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS, pattern="^بوت$"))
-async def bot_random_replies(event):
-    replies = [
-        "هلا عيني، تفضل؟ 🌹",
-        "البوت في خدمتك يا مدير. 🫡",
-        "نعم، من ينادي؟ 🤔",
-        "لبيه! اؤمرني بشيء؟ ✨",
-        "معك بوت الحماية المتكامل، كيف أساعدك؟ 🛡️",
-        "عيوني لك، اطلب وتمنى! 🌟"
-    ]
+async def bot_talk(event):
+    replies = ["لبيه! ✨", "هلا عيني 🌹", "تفضل يا مدير 🫡", "نعم، معك بوت الحماية 🛡️"]
     await event.reply(random.choice(replies))
 
-# --- 2. معالج الأوامر العامة والردود المضافة يدوياً ---
+# معالج الردود والوظائف الأساسية
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def global_commands_handler(event):
+async def main_handler(event):
     msg = event.raw_text
     gid = str(event.chat_id)
     
-    # التحقق من الردود الشخصية المضافة (اضف رد)
-    custom_reply_text = db.get_reply(gid, msg)
-    if custom_reply_text:
-        await event.reply(custom_reply_text)
-        return
+    # 1. نظام الردود (نصوص وميديا)
+    reply_data = db.get_reply_data(gid, msg)
+    if reply_data:
+        rep_text, media_id = reply_data
+        if media_id and media_id != "None":
+            await event.reply(rep_text if rep_text else "", file=media_id)
+            return
+        elif rep_text:
+            await event.reply(rep_text)
+            return
 
-    # التحقق من الصلاحية (يجب أن يكون مدير فأعلى للأوامر التالية)
+    # أوامر الإدارة (مدير فأعلى)
     if not await check_privilege(event, "مدير"):
         return
 
-    # فتح قائمة الأوامر (لوحة تحكم تون)
+    # فتح قائمة الأوامر
     if msg == "امر":
         btns = [
             [Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
             [Button.inline("⚙️ الإعدادات", "show_settings"), Button.inline("❌ إغلاق", "close")]
         ]
-        await event.respond("⬇️ **لوحة تحكم بوت الأساطير (نظام TON المتكامل):**", buttons=btns)
+        await event.respond("⬇️ **لوحة تحكم بوت الأساطير (نظام TON):**", buttons=btns)
 
-    # أوامر التثبيت (بالرد)
+    # أمر التثبيت
     elif msg == "تثبيت" and event.is_reply:
-        reply_to_msg = await event.get_reply_message()
-        await client.pin_from_id(event.chat_id, reply_to_msg.id)
-        await event.respond("✅ **تم تثبيت الرسالة بنجاح في المجموعة.**")
-    
-    elif msg == "الغاء التثبيت":
-        await client.unpin_from_id(event.chat_id)
-        await event.respond("🔓 **تم إلغاء تثبيت الرسالة.**")
+        reply = await event.get_reply_message()
+        await client.pin_from_id(event.chat_id, reply.id)
+        await event.respond("📌 تم التثبيت بنجاح.")
 
-    # إدارة الردود (اضف رد / مسح رد)
+    # نظام إضافة الردود المتطور (نص أو ميديا)
     elif msg.startswith("اضف رد "):
+        word = msg.replace("اضف رد ", "").strip()
+        
+        # إذا كان هناك رد (Reply) على ميديا (صورة/فيديو/الخ)
+        if event.is_reply:
+            reply_msg = await event.get_reply_message()
+            if reply_msg.media:
+                db.set_reply(gid, word, reply_msg.text if reply_msg.text else "", reply_msg.media)
+                await event.respond(f"✅ تم حفظ الرد (ميديا) للكلمة: **{word}**")
+                return
+
+        # إذا كان الرد نصياً مباشراً
         parts = msg.split(" ", 2)
         if len(parts) == 3:
             db.set_reply(gid, parts[1], parts[2])
-            await event.respond(f"✅ تم إضافة الرد التلقائي بنجاح:\n▫️ الكلمة: **{parts[1]}**\n▫️ الرد: **{parts[2]}**")
+            await event.respond(f"✅ تم حفظ الرد (نصي) لـ: **{parts[1]}**")
 
+    # مسح الرد
     elif msg.startswith("مسح رد "):
-        word_to_delete = msg.replace("مسح رد ", "").strip()
-        db.delete_reply(gid, word_to_delete)
-        await event.respond(f"🗑️ تم حذف الرد الخاص بالكلمة: **{word_to_delete}**")
+        word = msg.replace("مسح رد ", "").strip()
+        db.delete_reply(gid, word)
+        await event.respond(f"🗑️ تم حذف الرد لـ: **{word}**")
 
-    # إعدادات نظام الترحيب
+    # تفعيل وتعطيل الترحيب
     elif msg == "تفعيل الترحيب":
         db.set_setting(gid, "welcome_status", "on")
-        await event.respond("✅ **تم تفعيل نظام الترحيب بالأعضاء الجدد.**")
+        await event.respond("✅ تم تفعيل الترحيب.")
     
     elif msg == "تعطيل الترحيب":
         db.set_setting(gid, "welcome_status", "off")
-        await event.respond("❌ **تم تعطيل نظام الترحيب.**")
+        await event.respond("❌ تم تعطيل الترحيب.")
 
-# --- 3. نظام الترحيب التلقائي عند انضمام عضو ---
+# نظام الترحيب التلقائي
 @client.on(events.ChatAction)
-async def automatic_welcome(event):
-    if event.user_joined or event.user_added:
+async def welcome_action(event):
+    if (event.user_joined or event.user_added):
         gid = str(event.chat_id)
         if db.get_setting(gid, "welcome_status") == "on":
-            joined_user = await event.get_user()
-            welcome_msg = f"✨ نورت المجموعة يا {joined_user.first_name}!\n🆔 آيديك: `{joined_user.id}`\n📅 بالتوفيق لك معنا! 🌹"
-            await event.respond(welcome_msg)
+            user = await event.get_user()
+            await event.respond(f"✨ نورت المجموعة يا {user.first_name}! 🌹")
 
-# --- 4. استدعاء الموديولات المكملة (إلزامي في نهاية الملف) ---
-import ranks
-import locks
-import tag
-import callbacks
-import cleaner
+# استدعاء الموديولات الخارجية
+import ranks, locks, tag, callbacks, cleaner
 
-print("--- [نظام TON الاحترافي الشامل يعمل الآن بكافة طاقته] ---")
+print("--- [سورس TON يعمل الآن بكامل طاقته - 100%] ---")
 client.run_until_disconnected()
