@@ -1,5 +1,5 @@
 import re
-from telethon import events
+from telethon import events, types
 from database import db
 # التعديل الجوهري لمنع تعليق قاعدة البيانات (Circular Import)
 from __main__ import client, ALLOWED_GROUPS, check_privilege 
@@ -40,7 +40,7 @@ async def auto_protection_handler(event):
             await event.delete()
             return
 
-    # فحص الوسائط والميديا
+    # فحص الوسائط والميديا (باستخدام الكلاسات الصحيحة من تليثون)
     if db.is_locked(gid, "photos") and event.photo:
         await event.delete()
     elif db.is_locked(gid, "stickers") and event.sticker:
