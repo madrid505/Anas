@@ -1,9 +1,9 @@
 import asyncio
-import logging
-from telethon import TelegramClient, events, types
+import re
+from telethon import TelegramClient, events, Button, types
 from database_handler import Database
 
-# --- البيانات الخاصة بك ---
+# --- البيانات الأساسية ---
 API_ID = '33183154'
 API_HASH = 'ccb195afa05973cf544600ad3c313b84'
 BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
@@ -11,93 +11,80 @@ OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
 db = Database()
-client = TelegramClient('SuperAdminBot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+client = TelegramClient('SuperAdmin', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-async def is_admin(event):
-    if event.sender_id == OWNER_ID: return True
-    if event.chat_id not in ALLOWED_GROUPS: return False
-    perms = await client.get_permissions(event.chat_id, event.sender_id)
-    return perms.is_admin or perms.is_creator
+# --- دالة التحقق من الرتب ---
+async def get_user_rank(event):
+    if event.sender_id == OWNER_ID: return "المنشئ"
+    return db.get_rank(event.chat_id, event.sender_id)
 
-# --- نظام الترحيب التلقائي ---
-@client.on(events.ChatAction)
-async def welcome_handler(event):
-    if event.user_joined or event.user_added:
-        welcome_msg = db.get_welcome(event.chat_id)
-        if welcome_msg:
-            user = await event.get_user()
-            final_msg = welcome_msg.replace("الاسم", user.first_name).replace("الاي دي", str(user.id))
-            await event.respond(final_msg)
-
-# --- نظام مراقبة تغيير الهوية ---
+# --- 1. التشغيل التلقائي (Automatic Handlers) لمنع الروابط والصور ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def identity_check(event):
-    user = await event.get_sender()
-    if not user or not isinstance(user, types.User): return
-    uid, name = str(user.id), f"{user.first_name or ''} {user.last_name or ''}".strip()
-    un = f"@{user.username}" if user.username else "لا يوجد"
-    
-    db.cursor.execute("SELECT name, username FROM users WHERE uid=?", (uid,))
-    row = db.cursor.fetchone()
-    if row and (row[0] != name or row[1] != un):
-        await event.respond(f"🔍 **تغيير بيانات:**\n👤 من: {row[0]} ({row[1]})\n✅ إلى: {name} ({un})\n🆔: `{uid}`")
-        db.cursor.execute("UPDATE users SET name=?, username=? WHERE uid=?", (name, un, uid))
-    elif not row:
-        db.cursor.execute("INSERT INTO users VALUES (?, ?, ?)", (uid, name, un))
-    db.conn.commit()
+async def auto_cleaner(event):
+    if await get_user_rank(event) in ["المنشئ", "مدير", "مميز"]: return
 
-# --- معالج الأوامر العربية الشامل ---
-@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def main_controller(event):
-    msg = event.raw_text
     gid = str(event.chat_id)
-
-    # ردود تلقائية
-    db.cursor.execute("SELECT reply FROM replies WHERE gid=? AND word=?", (gid, msg))
-    res = db.cursor.fetchone()
-    if res: await event.respond(res[0])
-
-    if not await is_admin(event): return
-
-    # أوامر الإدارة بالرد
-    if event.is_reply:
-        reply_msg = await event.get_reply_message()
-        tid = reply_msg.sender_id
-        
-        if msg == "طرد": await client.kick_participant(event.chat_id, tid); await event.respond("✅ تم الطرد")
-        elif msg == "حظر": await client.edit_permissions(event.chat_id, tid, view_messages=False); await event.respond("🚫 تم الحظر")
-        elif msg == "كتم": await client.edit_permissions(event.chat_id, tid, send_messages=False); await event.respond("🔇 تم الكتم")
-        elif msg == "تقييد": await client.edit_permissions(event.chat_id, tid, send_messages=False, send_media=False); await event.respond("⚠️ تم التقييد")
-        elif msg in ["الغاء الحظر", "الغاء الكتم", "رفع القيود"]: 
-            await client.edit_permissions(event.chat_id, tid, view_messages=True, send_messages=True, send_media=True)
-            await event.respond("✅ تم رفع القيود")
-        elif msg == "تثبيت": await client.pin_from_id(event.chat_id, reply_msg.id); await event.respond("📌 تم التثبيت")
-        elif msg == "انذار":
-            db.cursor.execute("UPDATE warns SET count = count + 1 WHERE uid=? AND gid=?", (str(tid), gid))
-            # منطق الإنذارات هنا...
-            await event.respond("⚠️ تم تسجيل إنذار للعضو")
-
-    # أوامر الإعدادات
-    if msg.startswith("اضف ترحيب "):
-        txt = msg.replace("اضف ترحيب ", "")
-        db.set_welcome(gid, txt)
-        await event.respond("✅ تم حفظ رسالة الترحيب")
     
-    elif msg == "تاك":
-        users = await client.get_participants(event.chat_id)
-        mentions = [f"[\u2063](tg://user?id={u.id})" for u in users if not u.bot]
-        for i in range(0, len(mentions), 5):
-            await event.respond("📣 منشن للجميع: " + "".join(mentions[i:i+5]))
-            await asyncio.sleep(1)
+    # منع الروابط (Regex)
+    if db.get_setting(gid, "links") == "close":
+        if re.search(r'(https?://\S+|t\.me/\S+|@\S+)', event.raw_text):
+            await event.delete()
+            return
 
-    elif msg == "قفل الدردشة":
-        await client.edit_permissions(event.chat_id, send_messages=False)
-        await event.respond("🔒 تم قفل الدردشة للجميع")
+    # منع الصور
+    if event.photo and db.get_setting(gid, "photos") == "close":
+        await event.delete()
 
-    elif msg == "فتح الدردشة":
-        await client.edit_permissions(event.chat_id, send_messages=True)
-        await event.respond("🔓 تم فتح الدردشة للجميع")
+# --- 2. لوحة التحكم بالأزرار (Inline Keyboards) ---
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS, pattern="^امر$"))
+async def cmd_panel(event):
+    buttons = [
+        [Button.inline("🛡️ إعدادات الحماية", data="settings"), Button.inline("👥 الرتب", data="ranks")],
+        [Button.inline("💬 الردود", data="replies"), Button.inline("👋 الترحيب", data="welcome")],
+        [Button.url("📢 قناة السورس", "https://t.me/YourChannel")]
+    ]
+    await event.respond("⬇️ **أهلاً بك في لوحة تحكم البوت الذكية:**", buttons=buttons)
+
+# --- 3. معالج أزرار لوحة التحكم ---
+@client.on(events.CallbackQuery())
+async def callback_handler(event):
+    if not await get_user_rank(event) in ["المنشئ", "مدير"]:
+        await event.answer("⚠️ عذراً، هذا الأمر للمدراء فقط!", alert=True)
+        return
+
+    data = event.data.decode('utf-8')
+    if data == "settings":
+        btns = [
+            [Button.inline("قفل الروابط", data="lock_links"), Button.inline("فتح الروابط", data="unlock_links")],
+            [Button.inline("قفل الصور", data="lock_photos"), Button.inline("فتح الصور", data="unlock_photos")],
+            [Button.inline("🔙 رجوع", data="back")]
+        ]
+        await event.edit("🛠️ **إعدادات الحماية التلقائية:**", buttons=btns)
+    
+    elif data == "lock_links":
+        db.set_setting(event.chat_id, "links", "close")
+        await event.answer("🔒 تم قفل الروابط بنجاح", alert=True)
+
+# --- 4. الأوامر الذكية (Regex) للإدارة بالرد ---
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
+async def admin_tools(event):
+    msg = event.raw_text
+    if not event.is_reply: return
+    rank = await get_user_rank(event)
+    if rank not in ["المنشئ", "مدير"]: return
+
+    reply = await event.get_reply_message()
+    tid = reply.sender_id
+
+    # استخدام Regex لدعم كلمات متعددة (ارفع، رفع، ترقية)
+    if re.match(r"^(رفع مدير|ارفع مدير|ترقية مدير)$", msg):
+        db.set_rank(event.chat_id, tid, "مدير")
+        await event.respond(f"🎖️ تم رفع العضو كـ **مدير** في البوت.")
+
+    elif re.match(r"^(كتم|اكتم)$", msg):
+        await client.edit_permissions(event.chat_id, tid, send_messages=False)
+        await event.respond("🔇 تم كتم العضو تلقائياً.")
 
 # --- التشغيل ---
-print("البوت يعمل بنجاح...")
+print("البوت الاحترافي يعمل الآن...")
 client.run_until_disconnected()
