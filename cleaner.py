@@ -1,67 +1,61 @@
 import asyncio
-from telethon import events, types
-from main import client, ALLOWED_GROUPS, OWNER_ID
+from telethon import events
 from database import db
+import main  # الوصول للعميل والصلاحيات
 
-@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
-async def cleaner_system(event):
+@main.client.on(events.NewMessage(chats=main.ALLOWED_GROUPS))
+async def cleaner_handler(event):
     msg = event.raw_text
-    gid = event.chat_id
-    
-    # التحقق من الرتبة (مدير أو أعلى)
-    user_rank = db.get_rank(str(gid), event.sender_id)
-    if user_rank not in ["مدير", "مالك", "المنشئ"] and event.sender_id != OWNER_ID:
+    chat_id = event.chat_id
+
+    # التحقق من الصلاحية (يجب أن يكون مدير فأعلى لاستخدام التنظيف)
+    if not await main.check_privilege(event, "مدير"):
         return
 
-    # --- 1. مسح الرسائل ---
-    if msg.startswith("مسح "):
-        num_str = msg.replace("مسح ", "")
-        if num_str.isdigit():
-            num = int(num_str)
-            if num > 100: num = 100 # حد أقصى للحماية
-            
-            await event.delete() # حذف أمر المسح نفسه
-            messages = await client.get_messages(gid, limit=num)
-            await client.delete_messages(gid, messages)
-            
-            confirm = await event.respond(f"🧹 تم مسح **{len(messages)}** رسالة بنجاح.")
+    # --- 1. مسح عدد معين من الرسائل (مثال: مسح 50) ---
+    if msg.startswith("مسح ") and msg.split(" ")[1].isdigit():
+        num = int(msg.split(" ")[1])
+        if num > 100:
+            await event.respond("⚠️ الحد الأقصى للمسح في المرة الواحدة هو 100 رسالة.")
+            return
+
+        # حذف رسالة الأمر أولاً
+        await event.delete()
+        
+        # جلب وحذف الرسائل
+        messages = await main.client.get_messages(chat_id, limit=num)
+        await main.client.delete_messages(chat_id, messages)
+        
+        # إرسال تأكيد ثم حذفه تلقائياً بعد 3 ثوانٍ
+        confirm = await event.respond(f"🗑️ تم حذف **{len(messages)}** رسالة بنجاح.")
+        await asyncio.sleep(3)
+        await confirm.delete()
+
+    # --- 2. مسح رسائل البوتات فقط ---
+    elif msg == "تنظيف البوتات":
+        await event.delete()
+        messages = await main.client.get_messages(chat_id, limit=100)
+        bot_messages = [m for m in messages if m.sender and m.sender.bot]
+        
+        if bot_messages:
+            await main.client.delete_messages(chat_id, bot_messages)
+            confirm = await event.respond(f"🗑️ تم تنظيف **{len(bot_messages)}** رسالة من البوتات.")
             await asyncio.sleep(3)
             await confirm.delete()
+        else:
+            await event.respond("🔍 لم يتم العثور على رسائل بوتات مؤخراً.")
 
-    # --- 2. تنظيف الحسابات المحذوفة ---
-    elif msg == "تنظيف المحذوفين":
-        del_users = 0
-        async for user in client.iter_participants(gid):
-            if user.deleted:
-                try:
-                    await client.kick_participant(gid, user.id)
-                    del_users += 1
-                except: continue
-        await event.respond(f"✅ تم طرد **{del_users}** حساب محذوف من المجموعة.")
-
-    # --- 3. مسح المحظورين (إلغاء حظر الكل) ---
-    elif msg == "مسح المحظورين":
-        await event.respond("⏳ جاري إلغاء حظر الجميع...")
-        count = 0
-        async for user in client.iter_participants(gid, filter=types.ChannelParticipantsKicked):
-            try:
-                await client.edit_permissions(gid, user.id, view_messages=True)
-                count += 1
-            except: continue
-        await event.respond(f"🔓 تم مسح قائمة الحظر لـ **{count}** عضو.")
-
-    # --- 4. مسح المكتومين (إلغاء كتم الكل) ---
-    elif msg == "مسح المكتومين":
-        count = 0
-        async for user in client.iter_participants(gid, filter=types.ChannelParticipantsBanned):
-            try:
-                await client.edit_permissions(gid, user.id, send_messages=True)
-                count += 1
-            except: continue
-        await event.respond(f"🔇 تم إلغاء الكتم عن **{count}** عضو بنجاح.")
-
-    # --- 5. مسح رسائل البوت فقط ---
-    elif msg == "مسح رسائلي":
+    # --- 3. مسح رسائل الشخص (بالرد عليه) ---
+    elif msg == "مسح رسائله" and event.is_reply:
         await event.delete()
-        async for message in client.iter_messages(gid, from_user='me', limit=50):
-            await message.delete()
+        reply_msg = await event.get_reply_message()
+        user_id = reply_msg.sender_id
+        
+        messages = await main.client.get_messages(chat_id, limit=100)
+        user_messages = [m for m in messages if m.sender_id == user_id]
+        
+        if user_messages:
+            await main.client.delete_messages(chat_id, user_messages)
+            confirm = await event.respond(f"🗑️ تم حذف رسائل العضو المحددة.")
+            await asyncio.sleep(3)
+            await confirm.delete()
