@@ -200,21 +200,25 @@ async def auto_post_task(app):
                 await app.bot.send_message(chat_id=g_id, text="📿 ذكر الله راحة للقلوب.. سبحان الله وبحمده.")
             except: continue
 
-# --- تشغيل البوت ---
-async def main():
+# --- التشغيل النهائي المعتمد للسيرفرات ---
+def main():
     init_db()
+    # بناء التطبيق
     app = ApplicationBuilder().token(TOKEN).build()
     
+    # إضافة المعالجات
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), global_handler))
     app.add_handler(CallbackQueryHandler(on_button_click))
     
-    asyncio.create_task(auto_post_task(app))
+    # بدء المهام الخلفية (النشر التلقائي)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(auto_post_task(app))
     
-    print("🚀 تم تشغيل بوت مونوبولي بنسخته الكاملة...")
-    await app.run_polling()
+    print("🚀 بوت مونوبولي يعمل الآن بنجاح...")
+    
+    # طريقة التشغيل المستقرة في Docker و Northflank
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        pass
+    main()
