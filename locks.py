@@ -1,7 +1,8 @@
 import re
 from telethon import events
 from database import db
-import main  # الوصول لـ client و check_privilege و ALLOWED_GROUPS
+# التعديل الجوهري لمنع تعليق قاعدة البيانات (Circular Import)
+from __main__ import client, ALLOWED_GROUPS, check_privilege 
 
 # خريطة الميزات (الاسم بالعربي : المفتاح في القاعدة) لسهولة التكرار
 FEATURES = {
@@ -18,10 +19,10 @@ FEATURES = {
 }
 
 # --- 1. معالج الحذف التلقائي (التنفيذ الفوري) ---
-@main.client.on(events.NewMessage(chats=main.ALLOWED_GROUPS))
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def auto_protection_handler(event):
     # استثناء الإدمنية والمميزين من الحذف التلقائي
-    if await main.check_privilege(event, "مميز"):
+    if await check_privilege(event, "مميز"):
         return
 
     gid = str(event.chat_id)
@@ -58,13 +59,13 @@ async def auto_protection_handler(event):
         await event.delete()
 
 # --- 2. أوامر التحكم الإداري (قفل / فتح) ---
-@main.client.on(events.NewMessage(chats=main.ALLOWED_GROUPS))
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def locks_control_handler(event):
     msg = event.raw_text
     gid = str(event.chat_id)
 
     # التحقق من أن المرسل مدير فأعلى
-    if not await main.check_privilege(event, "مدير"):
+    if not await check_privilege(event, "مدير"):
         return
 
     # معالجة أوامر القفل والفتح لجميع الميزات
@@ -81,16 +82,16 @@ async def locks_control_handler(event):
     # --- 3. أوامر خاصة بالدردشة (قفل/فتح المجموعة) ---
     if msg == "قفل الدردشة":
         try:
-            await main.client.edit_permissions(event.chat_id, send_messages=False)
+            await client.edit_permissions(event.chat_id, send_messages=False)
             await event.respond("🚫 تم **إغلاق الدردشة**، لا يمكن للأعضاء الإرسال الآن.")
-        except Exception as e:
+        except Exception:
             await event.respond("❌ فشل قفل الدردشة، تأكد من صلاحيات البوت.")
             
     elif msg == "فتح الدردشة":
         try:
-            await main.client.edit_permissions(event.chat_id, send_messages=True)
+            await client.edit_permissions(event.chat_id, send_messages=True)
             await event.respond("✅ تم **فتح الدردشة** للجميع.")
-        except Exception as e:
+        except Exception:
             await event.respond("❌ فشل فتح الدردشة.")
 
     # --- 4. أمر الوسائط (لقفل/فتح كل شيء دفعة واحدة) ---
