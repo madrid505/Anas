@@ -13,7 +13,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- الثوابت والإعدادات ---
-TOKEN = "8509643139:AAG9r1U4FvxTV03RqiBXj9JxQEvGU2gHVN"
+TOKEN = "8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ"
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 DATABASE_FILE = "bot_data.db"
