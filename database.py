@@ -7,7 +7,7 @@ class BotDB:
         self.create_tables()
 
     def create_tables(self):
-        # جداول الرتب، الأقفال، الردود (مع دعم الميديا)، الإعدادات، والترحيب
+        # إنشاء جداول الرتب والأقفال والردود والإعدادات والترحيب
         self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id TEXT DEFAULT NULL)')
@@ -33,17 +33,14 @@ class BotDB:
         row = self.cursor.fetchone()
         return row[0] == 1 if row else False
 
-    # حفظ الرد (نص أو ميديا)
     def set_reply(self, gid, word, reply_text, media_id=None):
-        self.cursor.execute("INSERT OR REPLACE INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", 
-                           (str(gid), word, reply_text, media_id))
+        self.cursor.execute("INSERT OR REPLACE INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, str(media_id) if media_id else None))
         self.conn.commit()
 
     def delete_reply(self, gid, word):
         self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
         self.conn.commit()
 
-    # جلب الرد بالكامل
     def get_reply_data(self, gid, word):
         self.cursor.execute("SELECT reply, media_id FROM replies WHERE gid=? AND word=?", (str(gid), word))
         return self.cursor.fetchone()
