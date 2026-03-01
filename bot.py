@@ -1,43 +1,40 @@
+# bot.py
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from config import TOKEN, ALLOWED_GROUPS
-from handlers.admin import admin_router
-from handlers.user import user_router
+from config import TOKEN, ALLOWED_GROUPS, ADHKAR_INTERVAL
+from handlers_admin import admin_router
+from handlers_logic import logic_router
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ربط الأقسام (الأنظمة)
 dp.include_router(admin_router)
-dp.include_router(user_router)
+dp.include_router(logic_router)
 
-# --- قائمة الأوامر بالأزرار ---
 def main_menu():
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🏆 ملك التفاعل", callback_data="king"))
-    builder.row(types.InlineKeyboardButton(text="🔒 الأقفال", callback_data="locks"))
-    builder.row(types.InlineKeyboardButton(text="🛡️ الإدارة", callback_data="admin"))
-    builder.row(types.InlineKeyboardButton(text="🔙 عودة", callback_data="home"))
+    builder.button(text="🏆 ملك التفاعل", callback_data="king")
+    builder.button(text="🔒 الأقفال", callback_data="locks")
+    builder.button(text="🛡️ الإدارة", callback_data="admin")
+    builder.button(text="🔄 عودة", callback_data="back")
+    builder.adjust(2)
     return builder.as_markup()
 
 @dp.message(F.text == "امر")
-async def show_menu(message: types.Message):
-    await message.answer("🛠️ **أهلاً بك في نظام إدارة مونوبولي:**", reply_markup=main_menu())
+async def open_menu(message: types.Message):
+    await message.answer("🛠️ **قائمة أوامر مونوبولي:**", reply_markup=main_menu())
 
-# --- المهام التلقائية (نشر أذكار) ---
-async def auto_tasks():
+async def auto_adhkar():
     while True:
-        await asyncio.sleep(900) # 15 دقيقة
+        await asyncio.sleep(ADHKAR_INTERVAL)
         for chat_id in ALLOWED_GROUPS:
-            try:
-                await bot.send_message(chat_id, "💡 **تذكير:** لا تنسَ ذكر الله (سبحان الله وبحمده).")
-            except: continue
+            try: await bot.send_message(chat_id, "✨ ذكر الله: سبحان الله وبحمده ✨")
+            except: pass
 
 async def main():
-    logging.basicConfig(level=logging.INFO)
-    asyncio.create_task(auto_tasks())
+    asyncio.create_task(auto_adhkar())
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
