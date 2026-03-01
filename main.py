@@ -12,7 +12,7 @@ OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
 # بدء تشغيل العميل
-client = TelegramClient('AnasFinalSessionV2', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+client = TelegramClient('AnasFinalSessionV3', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 # دالة التحقق من الرتبة عالمياً
 async def check_privilege(event, required_rank):
