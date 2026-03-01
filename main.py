@@ -3,7 +3,7 @@ import re
 from telethon import TelegramClient, events, Button
 from database import db
 # استيراد الموديولات المنفصلة
-import ranks, locks, tag, callbacks 
+import ranks, locks, tag, callbacks , cleaner
 
 # --- بيانات الاعتماد الخاصة بك ---
 API_ID = '33183154'
