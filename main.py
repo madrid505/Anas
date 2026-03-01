@@ -4,8 +4,8 @@ from telethon import TelegramClient, events, types
 from database_handler import Database
 
 # --- البيانات الخاصة بك ---
-API_ID = '25736711'
-API_HASH = '809081e792461f52b8265a73e13d5b00'
+API_ID = '33183154'
+API_HASH = 'ccb195afa05973cf544600ad3c313b84'
 BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
