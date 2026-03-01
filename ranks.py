@@ -1,10 +1,13 @@
 import re
 from telethon import events, types
 from database import db
-import main  # الوصول للعميل والصلاحيات والمجموعات
+# بدلاً من import main استخدم التالي:
+from __main__ import client, OWNER_ID, ALLOWED_GROUPS, check_privilege 
 
-@main.client.on(events.NewMessage(chats=main.ALLOWED_GROUPS))
+@client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def ranks_manager_system(event):
+    # باقي الكود كما هو تماماً ولكن استبدل main.client بـ client فقط
+
     msg = event.raw_text
     gid = str(event.chat_id)
     
