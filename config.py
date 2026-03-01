@@ -2,7 +2,7 @@ import os
 
 # --- التوكن والمالك ---
 # يتم الجلب من البيئة، ومع وجود قيمة احتياطية (التي زودتني بها)
-TOKEN = os.getenv("TOKEN", "8509643139:AAG9r1U4FvxTV03RqiBXj9JxQEvGU2gHVN")
+TOKEN = os.getenv("TOKEN", "8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ")
 OWNER_ID = int(os.getenv("OWNER_ID", "5010882230"))
 
 # --- معرفات المجموعات المسموحة ---
