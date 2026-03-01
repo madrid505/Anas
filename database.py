@@ -7,16 +7,15 @@ class BotDB:
         self.create_tables()
 
     def create_tables(self):
-        # الرتب
         self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
-        # الأقفال
         self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
-        # الترحيب والردود
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS welcome (gid TEXT, msg TEXT)')
         self.conn.commit()
 
     def set_rank(self, gid, uid, rank):
-        self.cursor.execute("INSERT OR REPLACE INTO ranks VALUES (?, ?, ?)", (str(gid), str(uid), rank))
+        self.cursor.execute("INSERT OR REPLACE INTO ranks (gid, uid, rank) VALUES (?, ?, ?)", (str(gid), str(uid), rank))
         self.conn.commit()
 
     def get_rank(self, gid, uid):
@@ -25,12 +24,34 @@ class BotDB:
         return row[0] if row else "عضو"
 
     def toggle_lock(self, gid, feature, status):
-        self.cursor.execute("INSERT OR REPLACE INTO locks VALUES (?, ?, ?)", (str(gid), feature, status))
+        self.cursor.execute("INSERT OR REPLACE INTO locks (gid, feature, status) VALUES (?, ?, ?)", (str(gid), feature, status))
         self.conn.commit()
 
     def is_locked(self, gid, feature):
         self.cursor.execute("SELECT status FROM locks WHERE gid=? AND feature=?", (str(gid), feature))
         row = self.cursor.fetchone()
         return row[0] == 1 if row else False
+
+    def set_reply(self, gid, word, reply):
+        self.cursor.execute("INSERT OR REPLACE INTO replies (gid, word, reply) VALUES (?, ?, ?)", (str(gid), word, reply))
+        self.conn.commit()
+
+    def delete_reply(self, gid, word):
+        self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
+        self.conn.commit()
+
+    def get_reply(self, gid, word):
+        self.cursor.execute("SELECT reply FROM replies WHERE gid=? AND word=?", (str(gid), word))
+        row = self.cursor.fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, gid, key, value):
+        self.cursor.execute("INSERT OR REPLACE INTO settings (gid, key, value) VALUES (?, ?, ?)", (str(gid), key, value))
+        self.conn.commit()
+
+    def get_setting(self, gid, key):
+        self.cursor.execute("SELECT value FROM settings WHERE gid=? AND key=?", (str(gid), key))
+        row = self.cursor.fetchone()
+        return row[0] if row else "off"
 
 db = BotDB()
