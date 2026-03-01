@@ -1,13 +1,11 @@
 import re
 from telethon import events, types
 from database import db
-# بدلاً من import main استخدم التالي:
+# الاستيراد الصحيح لمنع تعليق قاعدة البيانات
 from __main__ import client, OWNER_ID, ALLOWED_GROUPS, check_privilege 
 
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def ranks_manager_system(event):
-    # باقي الكود كما هو تماماً ولكن استبدل main.client بـ client فقط
-
     msg = event.raw_text
     gid = str(event.chat_id)
     
@@ -25,7 +23,7 @@ async def ranks_manager_system(event):
     name = target_user.first_name if target_user else "العضو"
 
     # --- 1. أوامر الرفع والتنزيل (صلاحية مالك فأعلى) ---
-    if await main.check_privilege(event, "مالك"):
+    if await check_privilege(event, "مالك"):
         
         if msg in ["رفع مالك", "ارفع مالك"]:
             db.set_rank(gid, target_st_id, "مالك")
@@ -53,10 +51,10 @@ async def ranks_manager_system(event):
             return
 
     # --- 2. أوامر العقوبات الإدارية (صلاحية ادمن فأعلى) ---
-    if await main.check_privilege(event, "ادمن"):
+    if await check_privilege(event, "ادمن"):
         
         # حماية منشئ البوت (أنت) من أي عقوبة
-        if target_id == main.OWNER_ID:
+        if target_id == OWNER_ID:
             if msg in ["حظر", "كتم", "طرد", "تقييد"]:
                 await event.respond("⚠️ خطأ: لا يمكن تنفيذ عقوبة بحق منشئ البوت!")
                 return
@@ -64,7 +62,7 @@ async def ranks_manager_system(event):
         # تنفيذ الحظر
         if msg == "حظر":
             try:
-                await main.client.edit_permissions(event.chat_id, target_id, view_messages=False)
+                await client.edit_permissions(event.chat_id, target_id, view_messages=False)
                 await event.respond(f"🚫 تم حظر **{name}** من المجموعة.")
             except Exception:
                 await event.respond("❌ فشل الحظر: تأكد من صلاحيات البوت.")
@@ -72,7 +70,7 @@ async def ranks_manager_system(event):
         # تنفيذ الطرد
         elif msg == "طرد":
             try:
-                await main.client.kick_participant(event.chat_id, target_id)
+                await client.kick_participant(event.chat_id, target_id)
                 await event.respond(f"👞 تم طرد **{name}** من المجموعة.")
             except Exception:
                 await event.respond("❌ فشل الطرد.")
@@ -80,7 +78,7 @@ async def ranks_manager_system(event):
         # تنفيذ الكتم
         elif msg == "كتم":
             try:
-                await main.client.edit_permissions(event.chat_id, target_id, send_messages=False)
+                await client.edit_permissions(event.chat_id, target_id, send_messages=False)
                 await event.respond(f"🔇 تم كتم **{name}** بنجاح.")
             except Exception:
                 await event.respond("❌ فشل الكتم.")
@@ -88,19 +86,23 @@ async def ranks_manager_system(event):
         # تنفيذ التقييد (منع ميديا)
         elif msg == "تقييد":
             try:
-                await main.client.edit_permissions(event.chat_id, target_id, send_media=False, send_stickers=False, send_gifs=False)
+                await client.edit_permissions(event.chat_id, target_id, send_media=False, send_stickers=False, send_gifs=False)
                 await event.respond(f"⚠️ تم تقييد **{name}** من إرسال الوسائط.")
             except Exception:
                 await event.respond("❌ فشل التقييد.")
 
         # إلغاء العقوبات
         elif msg in ["الغاء الحظر", "رفع الحظر"]:
-            await main.client.edit_permissions(event.chat_id, target_id, view_messages=True, send_messages=True)
-            await event.respond(f"✅ تم إلغاء حظر **{name}**.")
+            try:
+                await client.edit_permissions(event.chat_id, target_id, view_messages=True, send_messages=True)
+                await event.respond(f"✅ تم إلغاء حظر **{name}**.")
+            except Exception: pass
 
         elif msg in ["الغاء الكتم", "رفع الكتم", "الغاء التقييد"]:
-            await main.client.edit_permissions(event.chat_id, target_id, send_messages=True, send_media=True, send_stickers=True)
-            await event.respond(f"🔊 تم إلغاء كتم/تقييد **{name}**.")
+            try:
+                await client.edit_permissions(event.chat_id, target_id, send_messages=True, send_media=True, send_stickers=True)
+                await event.respond(f"🔊 تم إلغاء كتم/تقييد **{name}**.")
+            except Exception: pass
 
     # --- 3. أمر كشف المعلومات (متاح للجميع) ---
     if msg == "كشف":
