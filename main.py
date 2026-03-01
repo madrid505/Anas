@@ -55,7 +55,8 @@ async def main_handler(event):
             [Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
             [Button.inline("⚙️ الإعدادات", "show_settings"), Button.inline("❌ إغلاق", "close")]
         ]
-        await event.respond("⬇️ **لوحة تحكم بوت الأساطير (نظام TON):**", buttons=btns)
+        await event.respond("♥️ **Monopoly مونوبولي لوحة تحكم** ♥️", buttons=btns)
+
 
     # أمر التثبيت
     elif msg == "تثبيت" and event.is_reply:
