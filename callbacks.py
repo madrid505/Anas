@@ -20,7 +20,7 @@ async def callback_handler(event):
             [Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
             [Button.inline("⚙️ الإعدادات", "show_settings"), Button.inline("❌ إغلاق", "close")]
         ]
-    await event.edit("♥️ Monopoly مونوبولي لوحة تحكم ♥️", buttons=btns)
+        await event.edit("♥️ Monopoly مونوبولي لوحة تحكم ♥️", buttons=btns)
 
     # --- قائمة الحماية والأقفال (Locks Menu) ---
     elif data == "show_locks":
