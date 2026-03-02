@@ -1,6 +1,7 @@
 import random
 import re
 import asyncio
+from datetime import datetime
 from telethon import TelegramClient, events, Button, types
 from database import db
 
@@ -11,20 +12,28 @@ BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
+# تشغيل البوت
 client = TelegramClient('Monopoly_Ultra_V5', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# دالة جلب اللقب بناءً على التفاعل
+# --- دالة الألقاب التفاعلية ---
 def get_user_title(count):
-    if count > 1000: return "سُلطان مونوبولي 🏆"
-    if count > 600: return "أسطورة التفاعل 👑"
-    if count > 300: return "متفاعل ذهبي 🥇"
-    if count > 150: return "صديق المجموعة 🤝"
-    if count > 50: return "متفاعل ناشئ ✨"
-    return "عضو جديد 🌱"
+    if count > 1000:
+        return "سُلطان مونوبولي 🏆"
+    elif count > 600:
+        return "أسطورة التفاعل 👑"
+    elif count > 300:
+        return "متفاعل ذهبي 🥇"
+    elif count > 150:
+        return "صديق المجموعة 🤝"
+    elif count > 50:
+        return "متفاعل ناشئ ✨"
+    else:
+        return "عضو جديد 🌱"
 
-# دالة التحقق من الرتبة
+# --- دالة التحقق من الرتبة ---
 async def check_privilege(event, required_rank):
-    if event.sender_id == OWNER_ID: return True
+    if event.sender_id == OWNER_ID:
+        return True
     user_rank = db.get_rank(str(event.chat_id), event.sender_id)
     ranks_order = {"عضو": 0, "مميز": 1, "ادمن": 2, "مدير": 3, "مالك": 4, "المنشئ": 5}
     return ranks_order.get(user_rank, 0) >= ranks_order.get(required_rank, 0)
@@ -39,12 +48,10 @@ async def reactive_replies(event):
     title = get_user_title(count)
     is_admin = await check_privilege(event, "مدير")
 
-    # ردود "بوت" المتنوعة
     if msg == "بوت":
-        res = ["لبيه! ✨", "نعم يا {title} 🌹", "تفضل يا مدير 🫡", "معك مونوبولي الحماية 🛡️"]
+        res = ["لبيه! ✨", "نعم يا {title} 🌹", "تفضل يا مدير 🫡", "أمرك مطاع يا غالي", "معك مونوبولي 🛡️"]
         await event.reply(random.choice(res).format(title=title))
 
-    # الردود الترحيبية (ملكياً وعادياً)
     elif msg in ["السلام عليكم", "سلام عليكم", "سلام"]:
         if is_admin:
             await event.reply(f"👑 وعليكم السلام والرحمة يا سيادة المشرف الموقر! نورت المكان.")
@@ -52,21 +59,29 @@ async def reactive_replies(event):
             await event.reply(f"وعليكم السلام والرحمة يا {title} 🌹")
 
     elif "صباح الخير" in msg:
-        await event.reply(f"صباح الورد والجمال يا {title}! يومك سعيد ☀️" if not is_admin else "صباح النور يا مطورنا/مديرنا الغالي 🌸")
+        if is_admin:
+            await event.reply("صباح النور يا مطورنا/مديرنا الغالي 🌸")
+        else:
+            await event.reply(f"صباح الورد والجمال يا {title}! يومك سعيد ☀️")
 
     elif "مساء الخير" in msg:
-        await event.reply(f"مساء النور والسرور يا {title} ✨" if not is_admin else "أجمل مساء لعيون الإدارة 🌙")
+        if is_admin:
+            await event.reply("أجمل مساء لعيون الإدارة 🌙")
+        else:
+            await event.reply(f"مساء النور والسرور يا {title} ✨")
 
-# --- معالج الرسائل الرئيسي (المهام الإدارية) ---
+# --- معالج الرسائل الرئيسي ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def main_handler(event):
     msg = event.raw_text
     gid = str(event.chat_id)
     uid = event.sender_id
     
-    if not event.is_private: db.increase_messages(gid, uid)
+    # تسجيل التفاعل التراكمي
+    if not event.is_private:
+        db.increase_messages(gid, uid)
 
-    # نظام الردود المبرمجة
+    # نظام الردود المبرمجة من القاعدة
     reply_data = db.get_reply_data(gid, msg)
     if reply_data:
         rep_text, media_id = reply_data
@@ -77,43 +92,76 @@ async def main_handler(event):
             await event.reply(rep_text)
             return
 
-    # نظام المتفاعلين
+    # --- نظام ملك التفاعل الفخم ---
     if msg == "المتفاعلين":
         top_users = db.get_top_active(gid, limit=5)
         if not top_users:
-            await event.reply("📉 لا يوجد تفاعل مسجل.")
+            await event.reply("📉 لا يوجد تفاعل مسجل بعد.")
             return
-        text = "🏆 **قائمة ملوك التفاعل:**\n"
-        for i, u in enumerate(top_users, 1):
-            text += f"{i} - `{u[0]}` ⇦ {u[1]} رسالة\n"
+
+        king_id, king_count = top_users[0]
+        try:
+            king_user = await client.get_entity(int(king_id))
+            king_name = king_user.first_name
+        except:
+            king_name = "مستخدم غير معروف"
+
+        text = (
+            f"🏆 **سُلطان التفاعل في Monopoly** 🏆\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"✨ **تهانينا لـ 'فارس الكلمة' لهذا الأسبوع!** ✨\n\n"
+            f"👤 **المتفاعل الملك:** {king_name}\n"
+            f"🆔 **الآيدي:** `{king_id}`\n"
+            f"📈 **رصيد المشاركات:** `{king_count}` رسالة ذهبية\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🎖️ **كلمة الإدارة:**\n"
+            f"\"التفاعل هو الروح التي تحيي مجموعتنا. شكراً لكونك جزءاً فعالاً في عائلة مونوبولي.\"\n\n"
+            f"💡 *ملاحظة: يتم تصفير العداد أسبوعياً لفتح باب المنافسة من جديد!*"
+        )
         await event.reply(text)
 
-    # نظام الكشف (مع اللقب)
+    # --- نظام الكشف الملكي ---
     if msg == "كشف" and event.is_reply:
         reply = await event.get_reply_message()
         user = await client.get_entity(reply.sender_id)
         u_rank = db.get_rank(gid, user.id)
         u_count = db.get_user_messages(gid, user.id)
         u_title = get_user_title(u_count)
-        is_banned = "⚠️ محظور!" if db.is_globally_banned(user.id) else "✅ سجل نظيف"
+        now_time = datetime.now().strftime("%I:%M %p")
+        is_banned = "⚠️ محظور سابقاً!" if db.is_globally_banned(user.id) else "✅ سجل نظيف"
         
-        await event.reply(f"🕵️‍♂️ **بطاقة كشف Monopoly**\n━━━━━━━━\n👤 **الاسم:** {user.first_name}\n🆔 **الآيدي:** `{user.id}`\n🎖️ **الرتبة:** {u_rank}\n🏆 **اللقب:** {u_title}\n📈 **المشاركات:** {u_count}\n🛡️ **الحالة:** {is_banned}")
+        info_text = (
+            f"🕵️‍♂️ **| بطاقة كشف العضو (Monopoly)**\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"👤 **الاسم:** {user.first_name}\n"
+            f"🆔 **الآيدي:** `{user.id}`\n"
+            f"🎖️ **الرتبة:** {u_rank}\n"
+            f"🏆 **اللقب:** {u_title}\n"
+            f"📈 **المشاركات:** {u_count}\n"
+            f"🕒 **التوقيت:** {now_time}\n"
+            f"🛡️ **الحالة:** {is_banned}\n"
+            f"━━━━━━━━━━━━━━"
+        )
+        await event.reply(info_text)
 
-    # أوامر الإدارة (مدير فأعلى)
-    if not await check_privilege(event, "مدير"): return
+    # تحقق صلاحيات الإدارة للأوامر القادمة
+    if not await check_privilege(event, "مدير"):
+        return
 
-    # نظام "أضف رد" بالخطوات
+    # --- نظام أضف رد (محادثة الخطوات) ---
     if msg == "اضف رد":
         async with client.conversation(event.chat_id, user_id=uid) as conv:
-            await conv.send_message("📝 أرسل الآن **الكلمة** التي تريد الرد عليها:")
+            await conv.send_message("📝 أرسل الآن **الكلمة** التي تريد الرد عليها (العنوان):")
             word_msg = await conv.get_response()
-            word = word_msg.text
-            await conv.send_message(f"✅ حسناً، أرسل الآن **الرد** (نص، صورة، ملصق) لـ '{word}':")
-            resp_msg = await conv.get_response()
-            db.set_reply(gid, word, resp_msg.text if resp_msg.text else "", resp_msg.media)
-            await conv.send_message(f"🎉 تم حفظ الرد الذكي لـ '{word}' بنجاح!")
+            word_text = word_msg.text
+            
+            await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_text}':")
+            response_msg = await conv.get_response()
+            
+            db.set_reply(gid, word_text, response_msg.text if response_msg.text else "", response_msg.media)
+            await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
 
-    # أوامر المشرفين (تثبيت، حذف، إلخ) بالرد
+    # أوامر الإدارة المباشرة بالرد
     if event.is_reply:
         reply_msg = await event.get_reply_message()
         if msg == "تثبيت":
@@ -124,23 +172,27 @@ async def main_handler(event):
             await event.delete()
         elif msg == "طرد":
             await client.kick_participant(gid, reply_msg.sender_id)
-            await event.respond("👞 تم طرد المستخدم.")
+            await event.respond("👞 تم طرد المستخدم بنجاح.")
 
+    # فتح لوحة التحكم
     if msg == "امر":
         btns = [[Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
                 [Button.inline("📜 الأوامر", "show_cmds"), Button.inline("❌ إغلاق", "close")]]
         await event.respond("♥️ Monopoly مونوبولي لوحة تحكم ♥️", buttons=btns)
 
-# نظام الترحيب
+# --- نظام الترحيب والعمليات الملكية ---
 @client.on(events.ChatAction)
 async def welcome_action(event):
     if event.user_joined or event.user_added:
         gid = str(event.chat_id)
-        if db.get_setting(gid, "welcome_status") == "on":
-            user = await event.get_user()
-            welcome = f"👑 أهلاً بمطورنا أنس!" if user.id == OWNER_ID else f"✨ نورت المجموعة يا {user.first_name}! 🌹"
-            await event.respond(welcome)
+        user = await event.get_user()
+        if user.id == OWNER_ID:
+            await event.respond("👑 نورت المجموعة بطلتك يا مطورنا أنس! انحنوا للملك.")
+        elif db.get_setting(gid, "welcome_status") == "on":
+            await event.respond(f"✨ نورت المجموعة يا {user.first_name}! 🌹")
 
+# استدعاء الموديولات المساعدة
 import ranks, locks, tag, callbacks, cleaner
-print("--- [Monopoly V5 - Active & Smart] ---")
+
+print("--- [Monopoly System Online - V5.5 Royal Edition] ---")
 client.run_until_disconnected()
