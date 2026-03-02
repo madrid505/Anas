@@ -15,6 +15,9 @@ class BotDB:
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT, PRIMARY KEY(gid, key))')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
         
+        # --- إضافة جدول بصمات الصور (Blacklist) للوظائف الجديدة ---
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS image_blacklist (hash TEXT PRIMARY KEY)')
+        
         # --- تحديث ذكي: التأكد من أن الجدول القديم تم تحويله للهيكل الجديد ---
         try:
             # التحقق مما إذا كان جدول ranks القديم يفتقر للمفتاح الأساسي
@@ -80,6 +83,7 @@ class BotDB:
         self.cursor.execute("SELECT reply, media_id FROM replies WHERE gid=? AND word=?", (str(gid), word))
         row = self.cursor.fetchone()
         if row:
+            # الإصلاح: استعادة الميديا لصيغتها الأصلية قبل إرسالها للـ main.py
             reply_text, m_data = row
             media_obj = pickle.loads(m_data) if m_data else None
             return reply_text, media_obj
@@ -93,5 +97,16 @@ class BotDB:
         self.cursor.execute("SELECT value FROM settings WHERE gid=? AND key=?", (str(gid), key))
         row = self.cursor.fetchone()
         return row[0] if row else "off"
+
+    # --- وظائف بصمات الصور الجديدة (نظام مكافحة الإباحية) ---
+    def add_image_hash(self, img_hash):
+        """إضافة بصمة صورة للقائمة السوداء"""
+        self.cursor.execute("INSERT OR IGNORE INTO image_blacklist (hash) VALUES (?)", (img_hash,))
+        self.conn.commit()
+
+    def is_image_blacklisted(self, img_hash):
+        """التحقق مما إذا كانت بصمة الصورة محظورة"""
+        self.cursor.execute("SELECT 1 FROM image_blacklist WHERE hash=? LIMIT 1", (img_hash,))
+        return self.cursor.fetchone() is not None
 
 db = BotDB()
