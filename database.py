@@ -55,8 +55,9 @@ class BotDB:
     def set_reply(self, gid, word, reply_text, media_id=None):
         # حذف الرد القديم لضمان عدم التكرار
         self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
-        # تخزين الميديا كـ Object إذا كان موجوداً لضمان عمل الصور والملصقات
-        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, media_id if media_id else None))
+        # التعديل الملكي: تحويل الميديا إلى نص صريح لتقبله قاعدة البيانات (SQLite)
+        m_id = str(media_id) if media_id else None
+        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, m_id))
         self.conn.commit()
 
     def delete_reply(self, gid, word):
