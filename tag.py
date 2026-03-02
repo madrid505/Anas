@@ -17,56 +17,59 @@ async def tag_handler(event):
     if not await check_privilege(event, "مدير"):
         return
 
-    # --- 1. أمر بدء المنشن (تاغ للكل) ---
+    # --- 1. أمر بدء المنشن (تاغ للكل) الشامل ---
     if msg in ["تاغ", "منشن", "تاق"]:
-        # إذا كانت هناك عملية منشن جارية، نمنع البدء بجديدة
+        # إذا كانت هناك عملية منشن جارية، نمنع البدء بجديدة لتجنب تكرار الرسائل
         if gid in active_tagging and active_tagging[gid]:
-            await event.respond("⚠️ هناك عملية **تاغ** جارية بالفعل!")
+            await event.respond("⚠️ هناك عملية **تاغ ملكية** جارية بالفعل!")
             return
 
         active_tagging[gid] = True
-        await event.respond("📣 جاري بدء **المنشن الشامل** لجميع الأعضاء...")
+        await event.respond("📣 جاري بدء **المنشن الشامل** لجميع أعضاء Monopoly...")
 
-        # جلب قائمة الأعضاء
+        # جلب قائمة الأعضاء بالكامل من المجموعة
         members = await client.get_participants(chat_id)
         
-        # تقسيم الأعضاء لمجموعات (مثلاً 5 أعضاء في كل رسالة لتجنب السبام)
+        # تقسيم الأعضاء لمجموعات (مثلاً 5 أعضاء في كل رسالة لتجنب سبام التليجرام)
         chunk_size = 5
         for i in range(0, len(members), chunk_size):
-            # التحقق إذا قام الإدمن بإيقاف التاغ أثناء العملية
+            # التحقق إذا قام الإدمن بإيقاف التاغ يدوياً أثناء العملية
             if not active_tagging.get(gid, False):
                 break
             
             chunk = members[i:i + chunk_size]
             tag_msg = ""
             for user in chunk:
-                if not user.bot: # استثناء البوتات من المنشن
+                if not user.bot: # استثناء البوتات من المنشن لتقليل الزخم
                     tag_msg += f"[{user.first_name}](tg://user?id={user.id})  "
             
             if tag_msg:
-                await client.send_message(chat_id, tag_msg)
-                # تأخير بسيط لتجنب حظر البوت من التليجرام (Flood Wait)
-                await asyncio.sleep(2)
+                try:
+                    await client.send_message(chat_id, tag_msg)
+                    # تأخير بسيط (2 ثانية) لتجنب حظر البوت مؤقتاً (Flood Wait)
+                    await asyncio.sleep(2)
+                except Exception:
+                    continue
 
         if active_tagging.get(gid):
-            await event.respond("✅ تم اكتمال **المنشن الشامل** لجميع الأعضاء.")
+            await event.respond("✅ تم اكتمال **المنشن الشامل** بنجاح يا مدير.")
             active_tagging[gid] = False
 
-    # --- 2. أمر إيقاف المنشن ---
+    # --- 2. أمر إيقاف المنشن يدوياً ---
     elif msg in ["ايقاف التاغ", "ايقاف المنشن", "وقف التاغ"]:
         if gid in active_tagging and active_tagging[gid]:
             active_tagging[gid] = False
-            await event.respond("🛑 تم **إيقاف** عملية المنشن بنجاح.")
+            await event.respond("🛑 تم **إيقاف** عملية المنشن بنجاح بطلب من الإدارة.")
         else:
-            await event.respond("❌ لا توجد عملية **تاغ** جارية حالياً.")
+            await event.respond("❌ لا توجد عملية **تاغ** نشطة حالياً لإيقافها.")
 
-    # --- 3. أمر منشن للمدراء فقط ---
+    # --- 3. أمر منشن مخصص للمدراء فقط ---
     elif msg in ["تاغ للمدراء", "منشن للمدراء"]:
-        await event.respond("📢 جاري منشن **طاقم الإدارة**...")
-        # استخدام الفلتر الصحيح لجلب الإدمنية
+        await event.respond("📢 جاري استدعاء **طاقم الإدارة الموقر**...")
+        # استخدام الفلتر الصحيح من تليثون لجلب الإدمنية فقط
         admins = await client.get_participants(chat_id, filter=types.ChannelParticipantsAdmins())
         
-        admin_tags = "👮‍♂️ **قائمة المدراء:**\n\n"
+        admin_tags = "👮‍♂️ **نداء عاجل لطاقم الإدارة:**\n\n"
         for admin in admins:
             if not admin.bot:
                 admin_tags += f"▫️ [{admin.first_name}](tg://user?id={admin.id})\n"
