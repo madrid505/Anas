@@ -210,28 +210,29 @@ async def main_handler(event):
         )
         await event.reply(sharaf_text)
 
-    # 5. نظام "كشف" - بالرد على العضو
+    # 5. نظام "كشف" - بالرد على العضو (إضافة حماية None)
     if message == "كشف" and event.is_reply:
         reply_msg = await event.get_reply_message()
-        target_user = await client.get_entity(reply_msg.sender_id)
-        t_rank = "مالك 👑" if target_user.id == OWNER_ID else db.get_rank(chat_id, target_user.id)
-        t_count = db.get_user_messages(chat_id, target_user.id)
-        t_title = get_user_title(t_count)
-        t_time = datetime.now().strftime("%I:%M %p")
-        
-        kashf_text = (
-            f"🕵️‍♂️ **| بطاقة كشف Monopoly**\n"
-            f"━━━━━━━━━━━━━━\n"
-            f"👤 **الاسم:** {target_user.first_name}\n"
-            f"🆔 **الآيدي:** `{target_user.id}`\n"
-            f"🎖️ **الرتبة:** {t_rank}\n"
-            f"🏆 **اللقب:** {t_title}\n"
-            f"📈 **المشاركات:** {t_count}\n"
-            f"🕒 **التوقيت:** {t_time}\n"
-            f"🛡️ **الحالة:** سجل نظيف ✅\n"
-            f"━━━━━━━━━━━━━━"
-        )
-        await event.reply(kashf_text)
+        if reply_msg and reply_msg.sender_id:
+            target_user = await client.get_entity(reply_msg.sender_id)
+            t_rank = "مالك 👑" if target_user.id == OWNER_ID else db.get_rank(chat_id, target_user.id)
+            t_count = db.get_user_messages(chat_id, target_user.id)
+            t_title = get_user_title(t_count)
+            t_time = datetime.now().strftime("%I:%M %p")
+            
+            kashf_text = (
+                f"🕵️‍♂️ **| بطاقة كشف Monopoly**\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"👤 **الاسم:** {target_user.first_name}\n"
+                f"🆔 **الآيدي:** `{target_user.id}`\n"
+                f"🎖️ **الرتبة:** {t_rank}\n"
+                f"🏆 **اللقب:** {t_title}\n"
+                f"📈 **المشاركات:** {t_count}\n"
+                f"🕒 **التوقيت:** {t_time}\n"
+                f"🛡️ **الحالة:** سجل نظيف ✅\n"
+                f"━━━━━━━━━━━━━━"
+            )
+            await event.reply(kashf_text)
 
     # تحقق من صلاحيات الإدارة للأوامر القادمة
     if not await check_privilege(event, "مدير"):
@@ -250,7 +251,6 @@ async def main_handler(event):
                 if response_val.sender_id != sender_id: return
                 
                 # الإصلاح الجذري: نمرر رسالة الرد كاملة لـ database.py ليتعامل مع الميديا
-                # تم التعديل لضمان استخلاص الميديا بطريقة لا تسبب خطأ Convert
                 media_to_save = response_val.media if response_val.media else None
                 
                 db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", media_to_save)
@@ -287,40 +287,42 @@ async def main_handler(event):
             db.conn.commit()
         await event.reply("🗑️ **تم مسح كافة الردود المبرمجة لهذه المجموعة بنجاح.**")
 
-    # 7. أوامر التحكم بالرسائل والرتب (بالرد)
+    # 7. أوامر التحكم بالرسائل والرتب (بالرد) - (حماية من NoneType)
     if event.is_reply:
         target_msg = await event.get_reply_message()
-        target_user_id = target_msg.sender_id
-        
-        # --- أوامر الرفع ---
-        if message == "رفع مالك":
-            db.set_rank(chat_id, target_user_id, "مالك")
-            await event.respond("👑 تم رفع العضو ليكون **مالكاً** في نظام Monopoly.")
-        elif message == "رفع مدير":
-            db.set_rank(chat_id, target_user_id, "مدير")
-            await event.respond("🎖️ تم رفع العضو ليكون **مديراً** للمجموعة.")
-        elif message == "رفع ادمن":
-            db.set_rank(chat_id, target_user_id, "ادمن")
-            await event.respond("🛡️ تم رفع العضو ليكون **أدمناً** في المجموعة.")
-        elif message == "رفع مميز":
-            db.set_rank(chat_id, target_user_id, "مميز")
-            await event.respond("✨ تم رفع العضو ليكون **عضواً مميزاً**.")
+        if target_msg and target_msg.sender_id:
+            target_user_id = target_msg.sender_id
+            
+            # --- أوامر الرفع ---
+            if message == "رفع مالك":
+                db.set_rank(chat_id, target_user_id, "مالك")
+                await event.respond("👑 تم رفع العضو ليكون **مالكاً** في نظام Monopoly.")
+            elif message == "رفع مدير":
+                db.set_rank(chat_id, target_user_id, "مدير")
+                await event.respond("🎖️ تم رفع العضو ليكون **مديراً** للمجموعة.")
+            elif message == "رفع ادمن":
+                db.set_rank(chat_id, target_user_id, "ادمن")
+                await event.respond("🛡️ تم رفع العضو ليكون **أدمناً** في المجموعة.")
+            elif message == "رفع مميز":
+                db.set_rank(chat_id, target_user_id, "مميز")
+                await event.respond("✨ تم رفع العضو ليكون **عضواً مميزاً**.")
 
-        # --- أوامر التنزيل ---
-        elif message in ["تنزيل مالك", "تنزيل مدير", "تنزيل ادمن", "تنزيل مميز"]:
-            db.set_rank(chat_id, target_user_id, "عضو")
-            await event.respond(f"📉 تم تنزيل رتبة المستخدم إلى **عضو** بنجاح.")
+            # --- أوامر التنزيل ---
+            elif message in ["تنزيل مالك", "تنزيل مدير", "تنزيل ادمن", "تنزيل مميز"]:
+                db.set_rank(chat_id, target_user_id, "عضو")
+                await event.respond(f"📉 تم تنزيل رتبة المستخدم إلى **عضو** بنجاح.")
 
-        # --- أوامر التفاعل مع الرسائل ---
-        elif message == "تثبيت":
-            await client.pin_message(event.chat_id, target_msg.id)
-            await event.respond("📌 تم تثبيت الرسالة بنجاح.")
-        elif message == "حذف":
-            await target_msg.delete()
-            await event.delete()
-        elif message == "طرد":
-            await client.kick_participant(event.chat_id, target_user_id)
-            await event.respond("👞 تم طرد المستخدم بنجاح.")
+            # --- أوامر التفاعل مع الرسائل ---
+            elif message == "تثبيت":
+                await client.pin_message(event.chat_id, target_msg.id)
+                await event.respond("📌 تم تثبيت الرسالة بنجاح.")
+            elif message == "حذف":
+                await target_msg.delete()
+                try: await event.delete()
+                except: pass
+            elif message == "طرد":
+                await client.kick_participant(event.chat_id, target_user_id)
+                await event.respond("👞 تم طرد المستخدم بنجاح.")
 
     # 8. فتح لوحة الأوامر
     if message == "امر":
@@ -338,9 +340,9 @@ async def welcome_action(event):
         new_user = await event.get_user()
         
         # ترحيب خاص بالمطور أنس
-        if new_user.id == OWNER_ID:
+        if new_user and new_user.id == OWNER_ID:
             await event.respond("👑 نورت المجموعة بطلتك يا مطورنا أنس! انحنوا للملك.")
-        elif db.get_setting(current_gid, "welcome_status") == "on":
+        elif new_user and db.get_setting(current_gid, "welcome_status") == "on":
             await event.respond(f"✨ نورت المجموعة يا {new_user.first_name}! ننتظر تفاعلك 🌹")
 
 # --- استدعاء الموديولات المساعدة ---
