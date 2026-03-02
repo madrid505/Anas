@@ -1,3 +1,4 @@
+import os; os.system('pip install Pillow')
 import random
 import re
 import asyncio
