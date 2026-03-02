@@ -249,11 +249,9 @@ async def main_handler(event):
                 response_val = await conv.get_response()
                 if response_val.sender_id != sender_id: return
                 
-                # الإصلاح الجذري: استخلاص الميديا الصالحة فقط للحفظ لتجنب خطأ التحويل
-                media_to_save = None
-                if response_val.media:
-                    # نأخذ الميديا مباشرة كما هي لكي يتعامل معها تليثون كملف مستلم
-                    media_to_save = response_val.media
+                # الإصلاح الجذري: نمرر رسالة الرد كاملة لـ database.py ليتعامل مع الميديا
+                # تم التعديل لضمان استخلاص الميديا بطريقة لا تسبب خطأ Convert
+                media_to_save = response_val.media if response_val.media else None
                 
                 db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", media_to_save)
                 await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
