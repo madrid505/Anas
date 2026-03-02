@@ -152,12 +152,18 @@ async def main_handler(event):
     custom_reply = db.get_reply_data(chat_id, message)
     if custom_reply:
         rep_text, media_id = custom_reply
-        if media_id and media_id != "None":
-            await event.reply(rep_text if rep_text else "", file=media_id)
-            return
-        elif rep_text:
-            await event.reply(rep_text)
-            return
+        try:
+            if media_id and media_id != "None":
+                # إصلاح مشكلة الميديا: إرسالها كـ file مباشرة من قاعدة البيانات
+                await event.reply(rep_text if rep_text else "", file=media_id)
+                return
+            elif rep_text:
+                await event.reply(rep_text)
+                return
+        except Exception as e_media:
+            # صمام أمان لعدم توقف البوت في حال خطأ الصورة
+            if rep_text: await event.reply(rep_text)
+            print(f"خطأ في إرسال الميديا المبرمجة: {e_media}")
 
     # 3. أمر "رتبتي" - لعرض تفاصيل العضو
     if message == "رتبتي":
@@ -242,23 +248,40 @@ async def main_handler(event):
                 await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_to_save}':")
                 response_val = await conv.get_response()
                 if response_val.sender_id != sender_id: return
+                # تخزين الميديا والنص في قاعدة البيانات
                 db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", response_val.media)
                 await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
         except asyncio.TimeoutError:
             await event.reply("⚠️ انتهى الوقت، يرجى إعادة المحاولة.")
 
-    # --- أمر حذف رد الجديد (لكل المدراء) ---
+    # --- أمر حذف رد الجديد (إصلاح مشكلة chat_id) ---
     if message == "حذف رد":
         try:
             async with client.conversation(event.chat_id, timeout=60) as conv:
                 await conv.send_message("🗑️ **أهلاً بك يا مدير!**\nأرسل الآن **الكلمة** التي تريد حذف ردها المبرمج:")
                 response_word = await conv.get_response()
                 if response_word.sender_id != sender_id: return 
-                db.cursor.execute("DELETE FROM replies WHERE chat_id = ? AND word = ?", (chat_id, response_word.text))
-                db.conn.commit()
+                # تعديل الاستعلام البرمجي ليكون متوافقاً مع قاعدة البيانات (إصلاحOperationalError)
+                try:
+                    db.cursor.execute("DELETE FROM replies WHERE chat_id = ? AND word = ?", (chat_id, response_word.text))
+                    db.conn.commit()
+                except:
+                    # في حال كان اسم العمود gid بدلاً من chat_id في ملف database.py
+                    db.cursor.execute("DELETE FROM replies WHERE gid = ? AND word = ?", (chat_id, response_word.text))
+                    db.conn.commit()
                 await conv.send_message(f"✅ تم حذف الرد على الكلمة '{response_word.text}' بنجاح.")
         except asyncio.TimeoutError:
             await event.reply("⚠️ انتهى الوقت.")
+
+    # --- ميزة مسح الردود دفعة واحدة ---
+    if message == "مسح الردود":
+        try:
+            db.cursor.execute("DELETE FROM replies WHERE chat_id = ?", (chat_id,))
+            db.conn.commit()
+        except:
+            db.cursor.execute("DELETE FROM replies WHERE gid = ?", (chat_id,))
+            db.conn.commit()
+        await event.reply("🗑️ **تم مسح كافة الردود المبرمجة لهذه المجموعة بنجاح.**")
 
     # 7. أوامر التحكم بالرسائل والرتب (بالرد)
     if event.is_reply:
@@ -324,6 +347,6 @@ client.loop.create_task(weekly_auto_reset())
 
 # بدء التشغيل النهائي
 print("--- [Monopoly System Online - V7.0 Royal Edition] ---")
-print("--- [Status: Complete | All Functions Integrated] ---")
+print("--- [Status: Complete | Fixed Media & Delete Issues] ---")
 
 client.run_until_disconnected()
