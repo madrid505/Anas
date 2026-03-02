@@ -8,12 +8,13 @@ from database import db
 # --- بيانات الاعتماد الخاصة بالبوت ---
 API_ID = 33183154
 API_HASH = 'ccb195afa05973cf544600ad3c313b84'
-BOT_TOKEN = '8654727197:AAGM3TkKo_PImPmQ-rSe2lOcITpGMtTkxQ'
+# تأكد دائماً أن التوكن بين علامتي التنصيص بدون أي مسافات إضافية
+BOT_TOKEN = '8654727197:AAGM3TkKoR_PImPmQ-rSe2lOcITpGMtTkxQ'
 OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
-# تشغيل العميل (Client)
-client = TelegramClient('Monopoly_Ultra_V5', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+# تشغيل العميل (Client) - تم تغيير اسم الجلسة هنا لحل مشكلة السجل (Logs)
+client = TelegramClient('Monopoly_Royal_V6', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 # --- 1. دالة التصفير التلقائي الأسبوعي ---
 async def weekly_auto_reset():
@@ -120,7 +121,7 @@ async def reactive_replies(event):
             await event.reply(f"صباح الورد والجمال يا {user_title}! أتمنى لك يوماً رائعاً ☀️")
 
     # الرد على تحية المساء
-    elif "مساء الخير" in msg_text:
+    elif " مساء الخير" in msg_text:
         if is_admin:
             await event.reply("أجمل مساء لعيون الإدارة الموقرة 🌙")
         else:
@@ -284,7 +285,7 @@ import ranks, locks, tag, callbacks, cleaner
 client.loop.create_task(weekly_auto_reset())
 
 # بدء التشغيل النهائي
-print("--- [Monopoly System Online - V5.8 Royal Edition] ---")
-print("--- [Status: Complete | Maintenance: Fixed] ---")
+print("--- [Monopoly System Online - V5.9 Royal Edition] ---")
+print("--- [Status: Fixed | Session: Clean] ---")
 
 client.run_until_disconnected()
