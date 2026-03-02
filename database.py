@@ -8,13 +8,22 @@ class BotDB:
         self.create_tables()
 
     def create_tables(self):
-        # الإصلاح: إضافة PRIMARY KEY لجدول الرتب لضمان نجاح عملية الاستبدال (Replace) عند التنزيل
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT, PRIMARY KEY(gid, uid))')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0, PRIMARY KEY(gid, feature))')
-        # تم تغيير نوع media_id ليدعم البيانات الثنائية BLOB لضمان حفظ الصور والملصقات بدقة
+        # إنشاء الجداول الأساسية
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id BLOB DEFAULT NULL)')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT, PRIMARY KEY(gid, key))')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
+        
+        # --- تحديث ذكي: إضافة PRIMARY KEY لضمان عمل "التنزيل" ---
+        try:
+            # نحاول إنشاء جدول جديد مؤقت بالهيكل الصحيح ثم نقل البيانات
+            self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks_new (gid TEXT, uid TEXT, rank TEXT, PRIMARY KEY(gid, uid))')
+            self.cursor.execute('INSERT OR IGNORE INTO ranks_new SELECT gid, uid, rank FROM ranks')
+            self.cursor.execute('DROP TABLE ranks')
+            self.cursor.execute('ALTER TABLE ranks_new RENAME TO ranks')
+        except: pass # إذا كان الجدول مصححاً بالفعل سيتخطى الخطوة
+
         self.conn.commit()
 
     # --- وظائف التفاعل والمشاركات ---
@@ -57,7 +66,6 @@ class BotDB:
 
     def set_reply(self, gid, word, reply_text, media_id=None):
         self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
-        # الإصلاح: حفظ الميديا كبيانات ثنائية (Serialized) لضمان استعادتها ككائن ميديا أصلي
         m_data = pickle.dumps(media_id) if media_id else None
         self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, m_data))
         self.conn.commit()
@@ -70,7 +78,6 @@ class BotDB:
         self.cursor.execute("SELECT reply, media_id FROM replies WHERE gid=? AND word=?", (str(gid), word))
         row = self.cursor.fetchone()
         if row:
-            # الإصلاح: استعادة الميديا لصيغتها الأصلية قبل إرسالها للـ main.py
             reply_text, m_data = row
             media_obj = pickle.loads(m_data) if m_data else None
             return reply_text, media_obj
