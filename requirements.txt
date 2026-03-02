@@ -1,2 +1,5 @@
 telethon
 Pillow
+requests
+python-dotenv
+cryptography
