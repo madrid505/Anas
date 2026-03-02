@@ -53,9 +53,10 @@ class BotDB:
         return row[0] == 1 if row else False
 
     def set_reply(self, gid, word, reply_text, media_id=None):
-        # دالة محسنة لضمان حذف الرد القديم قبل إضافة الجديد لعدم التكرار
+        # حذف الرد القديم لضمان عدم التكرار
         self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
-        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, str(media_id) if media_id else None))
+        # تخزين الميديا كـ Object إذا كان موجوداً لضمان عمل الصور والملصقات
+        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, media_id if media_id else None))
         self.conn.commit()
 
     def delete_reply(self, gid, word):
