@@ -18,7 +18,7 @@ async def ranks_manager_system(event):
     target_id = reply_msg.sender_id
     target_st_id = str(target_id)
     
-    # جلب معلومات المستخدم (الاسم)
+    # جلب معلومات المستخدم (الاسم) لضمان التفاعل الشخصي
     target_user = await reply_msg.get_sender()
     name = target_user.first_name if target_user else "العضو"
 
@@ -53,37 +53,37 @@ async def ranks_manager_system(event):
     # --- 2. أوامر العقوبات الإدارية (صلاحية ادمن فأعلى) ---
     if await check_privilege(event, "ادمن"):
         
-        # حماية منشئ البوت (أنت) من أي عقوبة
+        # حماية منشئ البوت (أنت يا أنس) من أي عقوبة بالخطأ
         if target_id == OWNER_ID:
             if msg in ["حظر", "كتم", "طرد", "تقييد"]:
-                await event.respond("⚠️ خطأ: لا يمكن تنفيذ عقوبة بحق منشئ البوت!")
+                await event.respond("⚠️ خطأ ملكي: لا يمكن تنفيذ عقوبة بحق منشئ البوت!")
                 return
 
-        # تنفيذ الحظر
+        # تنفيذ الحظر الكامل للمجموعة
         if msg == "حظر":
             try:
                 await client.edit_permissions(event.chat_id, target_id, view_messages=False)
-                await event.respond(f"🚫 تم حظر **{name}** من المجموعة.")
+                await event.respond(f"🚫 تم حظر **{name}** من المجموعة بنجاح.")
             except Exception:
-                await event.respond("❌ فشل الحظر: تأكد من صلاحيات البوت.")
+                await event.respond("❌ فشل الحظر: تأكد من صلاحيات البوت الإدارية.")
 
-        # تنفيذ الطرد
+        # تنفيذ الطرد الفوري
         elif msg == "طرد":
             try:
                 await client.kick_participant(event.chat_id, target_id)
-                await event.respond(f"👞 تم طرد **{name}** من المجموعة.")
+                await event.respond(f"👞 تم طرد **{name}** من المجموعة بنجاح.")
             except Exception:
-                await event.respond("❌ فشل الطرد.")
+                await event.respond("❌ فشل الطرد: قد يكون العضو مديراً أو بوت.")
 
-        # تنفيذ الكتم
+        # تنفيذ الكتم (منع إرسال الرسائل)
         elif msg == "كتم":
             try:
                 await client.edit_permissions(event.chat_id, target_id, send_messages=False)
                 await event.respond(f"🔇 تم كتم **{name}** بنجاح.")
             except Exception:
-                await event.respond("❌ فشل الكتم.")
+                await event.respond("❌ فشل الكتم: تأكد من الصلاحيات.")
 
-        # تنفيذ التقييد (منع ميديا)
+        # تنفيذ التقييد (منع إرسال الميديا فقط)
         elif msg == "تقييد":
             try:
                 await client.edit_permissions(event.chat_id, target_id, send_media=False, send_stickers=False, send_gifs=False)
@@ -91,28 +91,30 @@ async def ranks_manager_system(event):
             except Exception:
                 await event.respond("❌ فشل التقييد.")
 
-        # إلغاء العقوبات
+        # إلغاء العقوبات (رفع الحظر)
         elif msg in ["الغاء الحظر", "رفع الحظر"]:
             try:
                 await client.edit_permissions(event.chat_id, target_id, view_messages=True, send_messages=True)
-                await event.respond(f"✅ تم إلغاء حظر **{name}**.")
+                await event.respond(f"✅ تم إلغاء حظر **{name}** ويمكنه العودة الآن.")
             except Exception: pass
 
+        # إلغاء الكتم والتقييد
         elif msg in ["الغاء الكتم", "رفع الكتم", "الغاء التقييد"]:
             try:
                 await client.edit_permissions(event.chat_id, target_id, send_messages=True, send_media=True, send_stickers=True)
-                await event.respond(f"🔊 تم إلغاء كتم/تقييد **{name}**.")
+                await event.respond(f"🔊 تم إلغاء كتم/تقييد **{name}** بنجاح.")
             except Exception: pass
 
-    # --- 3. أمر كشف المعلومات (متاح للجميع) ---
+    # --- 3. أمر كشف المعلومات (متاح للجميع لضمان الشفافية) ---
     if msg == "كشف":
         user_rank = db.get_rank(gid, target_id)
         info = (
-            f"🔍 **بطاقة معلومات العضو:**\n"
+            f"🔍 **بطاقة معلومات العضو الملكية:**\n"
             f"━━━━━━━━━━━━━━\n"
             f"▫️ الاسم: {name}\n"
             f"▫️ الآيدي: `{target_id}`\n"
             f"▫️ الرتبة: **{user_rank}**\n"
+            f"🛡️ الحالة: عضو مسجل في Monopoly\n"
             f"━━━━━━━━━━━━━━"
         )
         await event.respond(info)
