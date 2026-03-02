@@ -237,7 +237,7 @@ async def main_handler(event):
     if not await check_privilege(event, "مدير"):
         return
 
-    # 6. نظام "أضف رد" المطور
+    # 6. نظام "أضف رد" المطور (تم إصلاح معالج الميديا والبيانات)
     if message == "اضف رد":
         try:
             async with client.conversation(event.chat_id, timeout=60) as conv:
@@ -248,8 +248,9 @@ async def main_handler(event):
                 await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_to_save}':")
                 response_val = await conv.get_response()
                 if response_val.sender_id != sender_id: return
-                # تخزين الميديا والنص في قاعدة البيانات
-                db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", response_val.media)
+                # الإصلاح الملكي: استخلاص الميديا وتجاهل الكائنات المعقدة قبل الإرسال للقاعدة
+                media_to_save = response_val.media if response_val.media else None
+                db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", media_to_save)
                 await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
         except asyncio.TimeoutError:
             await event.reply("⚠️ انتهى الوقت، يرجى إعادة المحاولة.")
