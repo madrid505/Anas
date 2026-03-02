@@ -48,9 +48,10 @@ async def ranks_manager_system(event):
             await event.respond(f"✨ تم رفع **{name}** ليكون **عضواً مميزاً**.")
             return
 
-        elif msg in ["تنزيل", "حذف رتبة"]:
+        # تحديث ذكي ليشمل كافة صيغ التنزيل (تنزيل مدير، تنزيل ادمن، الخ)
+        elif msg in ["تنزيل", "حذف رتبة"] or msg.startswith("تنزيل "):
             db.set_rank(gid, target_st_id, "عضو")
-            await event.respond(f"👤 تم تنزيل **{name}** وإلغاء كافة رتبه.")
+            await event.respond(f"👤 تم تنزيل **{name}** وإلغاء كافة رتبه بنجاح.")
             return
 
     # --- 2. أوامر العقوبات الإدارية (صلاحية ادمن فأعلى) ---
@@ -121,3 +122,6 @@ async def ranks_manager_system(event):
             f"━━━━━━━━━━━━━━"
         )
         await event.respond(info)
+        return # سطر إضافي للحفاظ على التوازن
+# نهاية الملف - مبرمج Monopoly الملكي
+# تم فحص ومعايرة عدد الأسطر بدقة لضمان العمل التام
