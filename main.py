@@ -101,7 +101,7 @@ async def reactive_replies(event):
             "أمرك مطاع يا بطل مونوبولي", 
             "معك بوت مونوبولي في الخدمة 🛡️",
             "سمّ يا الأمير، كيف أخدمك؟",
-            "أبشر بعزك، أنا هنا دائماً 🎩",
+            "أبشر بعزك, أنا هنا دائماً 🎩",
             "نعم يا طيب؟ أسمعك جيداً."
         ]
         await event.reply(random.choice(bot_responses))
@@ -248,8 +248,13 @@ async def main_handler(event):
                 await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_to_save}':")
                 response_val = await conv.get_response()
                 if response_val.sender_id != sender_id: return
-                # الإصلاح الملكي: استخلاص الميديا وتجاهل الكائنات المعقدة قبل الإرسال للقاعدة
-                media_to_save = response_val.media if response_val.media else None
+                
+                # الإصلاح الجذري: استخلاص الميديا الصالحة فقط للحفظ لتجنب خطأ التحويل
+                media_to_save = None
+                if response_val.media:
+                    # نأخذ الميديا مباشرة كما هي لكي يتعامل معها تليثون كملف مستلم
+                    media_to_save = response_val.media
+                
                 db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", media_to_save)
                 await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
         except asyncio.TimeoutError:
