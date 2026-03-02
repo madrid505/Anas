@@ -8,21 +8,21 @@ class BotDB:
         self.create_tables()
 
     def create_tables(self):
-        # إنشاء الجداول الأساسية
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
+        # إنشاء الجداول الأساسية - تم إضافة PRIMARY KEY مباشرة لضمان عدم التكرار
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT, PRIMARY KEY(gid, uid))')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0, PRIMARY KEY(gid, feature))')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id BLOB DEFAULT NULL)')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT, PRIMARY KEY(gid, key))')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
         
-        # --- تحديث ذكي: إضافة PRIMARY KEY لضمان عمل "التنزيل" ---
+        # --- تحديث ذكي: التأكد من أن الجدول القديم تم تحويله للهيكل الجديد ---
         try:
-            # نحاول إنشاء جدول جديد مؤقت بالهيكل الصحيح ثم نقل البيانات
+            # التحقق مما إذا كان جدول ranks القديم يفتقر للمفتاح الأساسي
             self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks_new (gid TEXT, uid TEXT, rank TEXT, PRIMARY KEY(gid, uid))')
             self.cursor.execute('INSERT OR IGNORE INTO ranks_new SELECT gid, uid, rank FROM ranks')
             self.cursor.execute('DROP TABLE ranks')
             self.cursor.execute('ALTER TABLE ranks_new RENAME TO ranks')
-        except: pass # إذا كان الجدول مصححاً بالفعل سيتخطى الخطوة
+        except: pass 
 
         self.conn.commit()
 
@@ -47,7 +47,9 @@ class BotDB:
 
     # --- الوظائف الأساسية ---
     def set_rank(self, gid, uid, rank):
-        self.cursor.execute("INSERT OR REPLACE INTO ranks (gid, uid, rank) VALUES (?, ?, ?)", (str(gid), str(uid), rank))
+        # تم تعديل الاستعلام لضمان الحذف أولاً ثم الإضافة لضمان التحديث الفعلي
+        self.cursor.execute("DELETE FROM ranks WHERE gid=? AND uid=?", (str(gid), str(uid)))
+        self.cursor.execute("INSERT INTO ranks (gid, uid, rank) VALUES (?, ?, ?)", (str(gid), str(uid), rank))
         self.conn.commit()
 
     def get_rank(self, gid, uid):
