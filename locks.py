@@ -26,37 +26,37 @@ async def auto_protection_handler(event):
         return
 
     gid = str(event.chat_id)
-    msg = event.raw_text
+    msg = event.raw_text or "" # حماية من الرسائل الفارغة
 
-    # فحص الروابط (Regex مطور ليشمل كل الصيغ)
-    if db.is_locked(gid, "links"):
-        if re.search(r'(https?://\S+|t\.me/\S+|www\.\S+)', msg):
+    try:
+        # فحص الروابط (Regex مطور ليشمل كل الصيغ)
+        if db.is_locked(gid, "links") and re.search(r'(https?://\S+|t\.me/\S+|www\.\S+)', msg):
             await event.delete()
             return
 
-    # فحص المعرفات (@) التي قد تستخدم للإعلان
-    if db.is_locked(gid, "usernames"):
-        if re.search(r'@\S+', msg):
+        # فحص المعرفات (@) التي قد تستخدم للإعلان
+        if db.is_locked(gid, "usernames") and re.search(r'@\S+', msg):
             await event.delete()
             return
 
-    # فحص الوسائط والميديا (باستخدام الكلاسات الصحيحة والحديثة من تليثون)
-    if db.is_locked(gid, "photos") and event.photo:
-        await event.delete()
-    elif db.is_locked(gid, "stickers") and event.sticker:
-        await event.delete()
-    elif db.is_locked(gid, "gifs") and event.gif:
-        await event.delete()
-    elif db.is_locked(gid, "forward") and event.fwd_from:
-        await event.delete()
-    elif db.is_locked(gid, "videos") and event.video:
-        await event.delete()
-    elif db.is_locked(gid, "voice") and event.voice:
-        await event.delete()
-    elif db.is_locked(gid, "files") and event.document and not event.voice and not event.video:
-        await event.delete()
-    elif db.is_locked(gid, "contacts") and event.contact:
-        await event.delete()
+        # فحص الوسائط والميديا (تحديث الفحص ليكون أكثر دقة)
+        if db.is_locked(gid, "photos") and isinstance(event.media, types.MessageMediaPhoto):
+            await event.delete()
+        elif db.is_locked(gid, "stickers") and event.sticker:
+            await event.delete()
+        elif db.is_locked(gid, "gifs") and event.gif:
+            await event.delete()
+        elif db.is_locked(gid, "forward") and event.fwd_from:
+            await event.delete()
+        elif db.is_locked(gid, "videos") and (event.video or event.video_note):
+            await event.delete()
+        elif db.is_locked(gid, "voice") and event.voice:
+            await event.delete()
+        elif db.is_locked(gid, "files") and event.document and not (event.voice or event.video or event.gif or event.sticker):
+            await event.delete()
+        elif db.is_locked(gid, "contacts") and event.contact:
+            await event.delete()
+    except Exception: pass # تجاهل الأخطاء إذا كانت الرسالة محذوفة
 
 # --- 2. أوامر التحكم الإداري (قفل / فتح) ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
