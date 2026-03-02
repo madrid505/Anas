@@ -7,14 +7,36 @@ class BotDB:
         self.create_tables()
 
     def create_tables(self):
-        # إنشاء جداول الرتب والأقفال والردود والإعدادات والترحيب
         self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id TEXT DEFAULT NULL)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS welcome (gid TEXT, msg TEXT)')
+        # جدول التفاعل الجديد
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
         self.conn.commit()
 
+    # --- وظائف التفاعل والمشاركات ---
+    def increase_messages(self, gid, uid):
+        self.cursor.execute("INSERT OR IGNORE INTO activity (gid, uid, count) VALUES (?, ?, 0)", (str(gid), str(uid)))
+        self.cursor.execute("UPDATE activity SET count = count + 1 WHERE gid=? AND uid=?", (str(gid), str(uid)))
+        self.conn.commit()
+
+    def get_user_messages(self, gid, uid):
+        self.cursor.execute("SELECT count FROM activity WHERE gid=? AND uid=?", (str(gid), str(uid)))
+        row = self.cursor.fetchone()
+        return row[0] if row else 0
+
+    def get_top_active(self, gid, limit=5):
+        self.cursor.execute("SELECT uid, count FROM activity WHERE gid=? ORDER BY count DESC LIMIT ?", (str(gid), limit))
+        return self.cursor.fetchall()
+
+    # --- وظيفة كشف المحظورين (عالمياً) ---
+    def is_globally_banned(self, uid):
+        # يبحث إذا كان الشخص مطروداً في أي جروب مسجل في قاعدة البيانات
+        self.cursor.execute("SELECT 1 FROM ranks WHERE uid=? AND rank='مطرود' LIMIT 1", (str(uid),))
+        return self.cursor.fetchone() is not None
+
+    # --- الوظائف الأساسية السابقة ---
     def set_rank(self, gid, uid, rank):
         self.cursor.execute("INSERT OR REPLACE INTO ranks (gid, uid, rank) VALUES (?, ?, ?)", (str(gid), str(uid), rank))
         self.conn.commit()
