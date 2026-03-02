@@ -148,20 +148,20 @@ async def main_handler(event):
     if not event.is_private:
         db.increase_messages(chat_id, sender_id)
 
-    # 2. نظام الردود المبرمجة (أضف رد) - تم وضعه هنا لضمان الأولوية
+    # 2. نظام الردود المبرمجة (أضف رد) - الإصلاح الشامل للميديا
     custom_reply = db.get_reply_data(chat_id, message)
     if custom_reply:
         rep_text, media_id = custom_reply
         try:
-            if media_id and media_id != "None":
-                # إصلاح مشكلة الميديا: إرسالها كـ file مباشرة من قاعدة البيانات
-                await event.reply(rep_text if rep_text else "", file=media_id)
+            # التحقق مما إذا كان الرد يحتوي على ميديا (صورة أو ملصق)
+            if media_id and str(media_id) != "None":
+                # إرسال الميديا كـ File لضمان ظهور الصورة فوراً
+                await client.send_file(event.chat_id, media_id, caption=rep_text if rep_text else "", reply_to=event.id)
                 return
             elif rep_text:
                 await event.reply(rep_text)
                 return
         except Exception as e_media:
-            # صمام أمان لعدم توقف البوت في حال خطأ الصورة
             if rep_text: await event.reply(rep_text)
             print(f"خطأ في إرسال الميديا المبرمجة: {e_media}")
 
