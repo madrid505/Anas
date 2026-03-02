@@ -13,14 +13,17 @@ async def ranks_manager_system(event):
     if not event.is_reply:
         return
     
-    # جلب بيانات الشخص المردود عليه
+    # جلب بيانات الشخص المردود عليه مع إضافة حماية التأكد من الوجود
     reply_msg = await event.get_reply_message()
+    if not reply_msg or not reply_msg.sender_id:
+        return
+
     target_id = reply_msg.sender_id
     target_st_id = str(target_id)
     
     # جلب معلومات المستخدم (الاسم) لضمان التفاعل الشخصي
     target_user = await reply_msg.get_sender()
-    name = target_user.first_name if target_user else "العضو"
+    name = target_user.first_name if (target_user and hasattr(target_user, 'first_name')) else "العضو"
 
     # --- 1. أوامر الرفع والتنزيل (صلاحية مالك فأعلى) ---
     if await check_privilege(event, "مالك"):
