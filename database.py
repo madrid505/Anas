@@ -11,7 +11,6 @@ class BotDB:
         self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id TEXT DEFAULT NULL)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
-        # جدول التفاعل الجديد
         self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
         self.conn.commit()
 
@@ -30,13 +29,11 @@ class BotDB:
         self.cursor.execute("SELECT uid, count FROM activity WHERE gid=? ORDER BY count DESC LIMIT ?", (str(gid), limit))
         return self.cursor.fetchall()
 
-    # --- وظيفة كشف المحظورين (عالمياً) ---
     def is_globally_banned(self, uid):
-        # يبحث إذا كان الشخص مطروداً في أي جروب مسجل في قاعدة البيانات
         self.cursor.execute("SELECT 1 FROM ranks WHERE uid=? AND rank='مطرود' LIMIT 1", (str(uid),))
         return self.cursor.fetchone() is not None
 
-    # --- الوظائف الأساسية السابقة ---
+    # --- الوظائف الأساسية ---
     def set_rank(self, gid, uid, rank):
         self.cursor.execute("INSERT OR REPLACE INTO ranks (gid, uid, rank) VALUES (?, ?, ?)", (str(gid), str(uid), rank))
         self.conn.commit()
@@ -56,7 +53,9 @@ class BotDB:
         return row[0] == 1 if row else False
 
     def set_reply(self, gid, word, reply_text, media_id=None):
-        self.cursor.execute("INSERT OR REPLACE INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, str(media_id) if media_id else None))
+        # دالة محسنة لضمان حذف الرد القديم قبل إضافة الجديد لعدم التكرار
+        self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
+        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, str(media_id) if media_id else None))
         self.conn.commit()
 
     def delete_reply(self, gid, word):
