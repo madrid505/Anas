@@ -1,6 +1,8 @@
 import re
+import io
 from telethon import events, types
 from database import db
+from hasher import get_image_hash
 # الاستيراد الصحيح لمنع تعليق قاعدة البيانات
 from __main__ import client, OWNER_ID, ALLOWED_GROUPS, check_privilege 
 
@@ -57,6 +59,18 @@ async def ranks_manager_system(event):
     # --- 2. أوامر العقوبات الإدارية (صلاحية ادمن فأعلى) ---
     if await check_privilege(event, "ادمن"):
         
+        # ميزة حظر بصمة الصورة (مكافحة الإباحية والسبام)
+        if msg == "حظر صورة":
+            if reply_msg.photo:
+                photo_bytes = await reply_msg.download_media(file=io.BytesIO())
+                img_hash = get_image_hash(photo_bytes)
+                db.add_image_hash(img_hash)
+                await reply_msg.delete()
+                await event.respond("🚫 تم حظر بصمة هذه الصورة بنجاح؛ لن يتم السماح بنشرها مجدداً.")
+                return
+            else:
+                await event.respond("⚠️ يجب الرد على 'صورة' لتنفيذ أمر الحظر.")
+
         # حماية منشئ البوت (أنت يا أنس) من أي عقوبة بالخطأ
         if target_id == OWNER_ID:
             if msg in ["حظر", "كتم", "طرد", "تقييد"]:
@@ -122,6 +136,5 @@ async def ranks_manager_system(event):
             f"━━━━━━━━━━━━━━"
         )
         await event.respond(info)
-        return # سطر إضافي للحفاظ على التوازن
-# نهاية الملف - مبرمج Monopoly الملكي
-# تم فحص ومعايرة عدد الأسطر بدقة لضمان العمل التام
+        return
+# نهاية الملف - مبرمج Monopoly الملكي - 2026
