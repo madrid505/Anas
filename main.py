@@ -14,7 +14,7 @@ OWNER_ID = 5010882230
 ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 
 # تشغيل العميل (Client) - تم تغيير اسم الجلسة هنا لحل مشكلة السجل (Logs)
-client = TelegramClient('Monopoly_Royal_V6', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+client = TelegramClient('Monopoly_Royal_V6_Updated', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
 # --- 1. دالة التصفير التلقائي الأسبوعي ---
 async def weekly_auto_reset():
@@ -153,7 +153,8 @@ async def main_handler(event):
     if message == "رتبتي":
         my_count = db.get_user_messages(chat_id, sender_id)
         my_title = get_user_title(my_count)
-        my_rank = db.get_rank(chat_id, sender_id)
+        # التعرف التلقائي على المالك الأساسي (أنس)
+        my_rank = "مالك (مطور المشروع) 👑" if sender_id == OWNER_ID else db.get_rank(chat_id, sender_id)
         info_msg = (
             f"📊 **بطاقة تفاصيلك في Monopoly**\n"
             f"━━━━━━━━━━━━━━━━━━\n"
@@ -197,7 +198,7 @@ async def main_handler(event):
     if message == "كشف" and event.is_reply:
         reply_msg = await event.get_reply_message()
         target_user = await client.get_entity(reply_msg.sender_id)
-        t_rank = db.get_rank(chat_id, target_user.id)
+        t_rank = "مالك 👑" if target_user.id == OWNER_ID else db.get_rank(chat_id, target_user.id)
         t_count = db.get_user_messages(chat_id, target_user.id)
         t_title = get_user_title(t_count)
         t_time = datetime.now().strftime("%I:%M %p")
@@ -243,18 +244,39 @@ async def main_handler(event):
         except Exception as e_conv:
             print(f"Error in convo: {e_conv}")
 
-    # 7. أوامر التحكم بالرسائل (بالرد)
+    # 7. أوامر التحكم بالرسائل والرتب (بالرد)
     if event.is_reply:
         target_msg = await event.get_reply_message()
-        if message == "تثبيت":
-            # استخدام الطريقة الرسمية لتجنب خطأ الـ Logs
+        target_user_id = target_msg.sender_id
+        
+        # --- أوامر الرفع ---
+        if message == "رفع مالك":
+            db.set_rank(chat_id, target_user_id, "مالك")
+            await event.respond("👑 تم رفع العضو ليكون **مالكاً** في نظام Monopoly.")
+        elif message == "رفع مدير":
+            db.set_rank(chat_id, target_user_id, "مدير")
+            await event.respond("🎖️ تم رفع العضو ليكون **مديراً** للمجموعة.")
+        elif message == "رفع ادمن":
+            db.set_rank(chat_id, target_user_id, "ادمن")
+            await event.respond("🛡️ تم رفع العضو ليكون **أدمناً** في المجموعة.")
+        elif message == "رفع مميز":
+            db.set_rank(chat_id, target_user_id, "مميز")
+            await event.respond("✨ تم رفع العضو ليكون **عضواً مميزاً**.")
+
+        # --- أوامر التنزيل ---
+        elif message in ["تنزيل مالك", "تنزيل مدير", "تنزيل ادمن", "تنزيل مميز"]:
+            db.set_rank(chat_id, target_user_id, "عضو")
+            await event.respond(f"📉 تم تنزيل رتبة المستخدم إلى **عضو** بنجاح.")
+
+        # --- أوامر التفاعل مع الرسائل ---
+        elif message == "تثبيت":
             await client.pin_message(event.chat_id, target_msg.id)
             await event.respond("📌 تم تثبيت الرسالة بنجاح.")
         elif message == "حذف":
             await target_msg.delete()
             await event.delete()
         elif message == "طرد":
-            await client.kick_participant(event.chat_id, target_msg.sender_id)
+            await client.kick_participant(event.chat_id, target_user_id)
             await event.respond("👞 تم طرد المستخدم بنجاح.")
 
     # 8. فتح لوحة الأوامر
@@ -285,7 +307,7 @@ import ranks, locks, tag, callbacks, cleaner
 client.loop.create_task(weekly_auto_reset())
 
 # بدء التشغيل النهائي
-print("--- [Monopoly System Online - V5.9 Royal Edition] ---")
-print("--- [Status: Fixed | Session: Clean] ---")
+print("--- [Monopoly System Online - V6.0 Royal Edition] ---")
+print("--- [Status: Fixed | Ranks: Integrated] ---")
 
 client.run_until_disconnected()
