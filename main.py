@@ -1,7 +1,7 @@
 import random
 import re
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events, Button, types
 from database import db
 
@@ -15,7 +15,26 @@ ALLOWED_GROUPS = [-1002695848824, -1003721123319, -1002052564369]
 # تشغيل البوت
 client = TelegramClient('Monopoly_Ultra_V5', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# --- دالة الألقاب التفاعلية ---
+# --- 1. دالة التصفير التلقائي الأسبوعي (الجديدة) ---
+async def weekly_auto_reset():
+    """تقوم هذه الدالة بتصفير عداد التفاعل تلقائياً كل 7 أيام"""
+    while True:
+        try:
+            # ننتظر لمدة أسبوع كامل (604800 ثانية)
+            await asyncio.sleep(604800) 
+            
+            # تنفيذ عملية المسح في قاعدة البيانات
+            db.cursor.execute("DELETE FROM activity")
+            db.conn.commit()
+            
+            # إرسال تنبيه للمجموعات المسموحة (اختياري)
+            for chat_id in ALLOWED_GROUPS:
+                await client.send_message(chat_id, "🔄 **تنبيه الإدارة:**\nتم تصفير عداد التفاعل بنجاح! ابدأوا منافسة جديدة الآن. 🏆")
+        except Exception as e:
+            print(f"خطأ في نظام التصفير: {e}")
+            await asyncio.sleep(3600) # إعادة المحاولة بعد ساعة في حال الخطأ
+
+# --- 2. دالة الألقاب التفاعلية ---
 def get_user_title(count):
     if count > 1000:
         return "سُلطان مونوبولي 🏆"
@@ -30,7 +49,7 @@ def get_user_title(count):
     else:
         return "عضو جديد 🌱"
 
-# --- دالة التحقق من الرتبة ---
+# --- 3. دالة التحقق من الرتبة ---
 async def check_privilege(event, required_rank):
     if event.sender_id == OWNER_ID:
         return True
@@ -38,7 +57,7 @@ async def check_privilege(event, required_rank):
     ranks_order = {"عضو": 0, "مميز": 1, "ادمن": 2, "مدير": 3, "مالك": 4, "المنشئ": 5}
     return ranks_order.get(user_rank, 0) >= ranks_order.get(required_rank, 0)
 
-# --- نظام الردود الملكية والذكية ---
+# --- 4. نظام الردود الملكية والذكية ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def reactive_replies(event):
     msg = event.raw_text
@@ -60,7 +79,7 @@ async def reactive_replies(event):
 
     elif "صباح الخير" in msg:
         if is_admin:
-            await event.reply("صباح النور يا مطورنا/مديرنا الغالي 🌸")
+            await event.reply("صباح النور يا مطورنا الغالي 🌸")
         else:
             await event.reply(f"صباح الورد والجمال يا {title}! يومك سعيد ☀️")
 
@@ -70,18 +89,16 @@ async def reactive_replies(event):
         else:
             await event.reply(f"مساء النور والسرور يا {title} ✨")
 
-# --- معالج الرسائل الرئيسي ---
+# --- 5. معالج الرسائل الرئيسي ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def main_handler(event):
     msg = event.raw_text
     gid = str(event.chat_id)
     uid = event.sender_id
     
-    # تسجيل التفاعل التراكمي
     if not event.is_private:
         db.increase_messages(gid, uid)
 
-    # نظام الردود المبرمجة من القاعدة
     reply_data = db.get_reply_data(gid, msg)
     if reply_data:
         rep_text, media_id = reply_data
@@ -116,7 +133,7 @@ async def main_handler(event):
             f"━━━━━━━━━━━━━━━━━━\n"
             f"🎖️ **كلمة الإدارة:**\n"
             f"\"التفاعل هو الروح التي تحيي مجموعتنا. شكراً لكونك جزءاً فعالاً في عائلة مونوبولي.\"\n\n"
-            f"💡 *ملاحظة: يتم تصفير العداد أسبوعياً لفتح باب المنافسة من جديد!*"
+            f"💡 *ملاحظة: يتم تصفير العداد تلقائياً كل أسبوع لفتح المنافسة!*"
         )
         await event.reply(text)
 
@@ -144,7 +161,6 @@ async def main_handler(event):
         )
         await event.reply(info_text)
 
-    # تحقق صلاحيات الإدارة للأوامر القادمة
     if not await check_privilege(event, "مدير"):
         return
 
@@ -155,13 +171,12 @@ async def main_handler(event):
             word_msg = await conv.get_response()
             word_text = word_msg.text
             
-            await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_text}':")
+            await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** لـ '{word_text}':")
             response_msg = await conv.get_response()
             
             db.set_reply(gid, word_text, response_msg.text if response_msg.text else "", response_msg.media)
             await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
 
-    # أوامر الإدارة المباشرة بالرد
     if event.is_reply:
         reply_msg = await event.get_reply_message()
         if msg == "تثبيت":
@@ -174,13 +189,12 @@ async def main_handler(event):
             await client.kick_participant(gid, reply_msg.sender_id)
             await event.respond("👞 تم طرد المستخدم بنجاح.")
 
-    # فتح لوحة التحكم
     if msg == "امر":
         btns = [[Button.inline("🔒 الحماية", "show_locks"), Button.inline("🎖️ الرتب", "show_ranks")],
                 [Button.inline("📜 الأوامر", "show_cmds"), Button.inline("❌ إغلاق", "close")]]
         await event.respond("♥️ Monopoly مونوبولي لوحة تحكم ♥️", buttons=btns)
 
-# --- نظام الترحيب والعمليات الملكية ---
+# --- 6. نظام الترحيب والعمليات الملكية ---
 @client.on(events.ChatAction)
 async def welcome_action(event):
     if event.user_joined or event.user_added:
@@ -193,6 +207,9 @@ async def welcome_action(event):
 
 # استدعاء الموديولات المساعدة
 import ranks, locks, tag, callbacks, cleaner
+
+# تشغيل مهام الخلفية (التصفير التلقائي)
+client.loop.create_task(weekly_auto_reset())
 
 print("--- [Monopoly System Online - V5.5 Royal Edition] ---")
 client.run_until_disconnected()
