@@ -21,26 +21,26 @@ FEATURES = {
 # --- 1. معالج الحذف التلقائي (التنفيذ الفوري) ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def auto_protection_handler(event):
-    # استثناء الإدمنية والمميزين من الحذف التلقائي
+    # استثناء الإدمنية والمميزين من الحذف التلقائي لضمان مرونة الإدارة
     if await check_privilege(event, "مميز"):
         return
 
     gid = str(event.chat_id)
     msg = event.raw_text
 
-    # فحص الروابط (Regex)
+    # فحص الروابط (Regex مطور ليشمل كل الصيغ)
     if db.is_locked(gid, "links"):
         if re.search(r'(https?://\S+|t\.me/\S+|www\.\S+)', msg):
             await event.delete()
             return
 
-    # فحص المعرفات (@)
+    # فحص المعرفات (@) التي قد تستخدم للإعلان
     if db.is_locked(gid, "usernames"):
         if re.search(r'@\S+', msg):
             await event.delete()
             return
 
-    # فحص الوسائط والميديا (باستخدام الكلاسات الصحيحة من تليثون)
+    # فحص الوسائط والميديا (باستخدام الكلاسات الصحيحة والحديثة من تليثون)
     if db.is_locked(gid, "photos") and event.photo:
         await event.delete()
     elif db.is_locked(gid, "stickers") and event.sticker:
@@ -64,11 +64,11 @@ async def locks_control_handler(event):
     msg = event.raw_text
     gid = str(event.chat_id)
 
-    # التحقق من أن المرسل مدير فأعلى
+    # التحقق من أن المرسل مدير فأعلى لتنفيذ أوامر القفل
     if not await check_privilege(event, "مدير"):
         return
 
-    # معالجة أوامر القفل والفتح لجميع الميزات
+    # معالجة أوامر القفل والفتح لجميع الميزات بشكل ديناميكي
     for ar_name, en_key in FEATURES.items():
         if msg == f"قفل {ar_name}":
             db.toggle_lock(gid, en_key, 1)
@@ -82,6 +82,7 @@ async def locks_control_handler(event):
     # --- 3. أوامر خاصة بالدردشة (قفل/فتح المجموعة) ---
     if msg == "قفل الدردشة":
         try:
+            # تقييد صلاحيات الأعضاء العاديين في المجموعة
             await client.edit_permissions(event.chat_id, send_messages=False)
             await event.respond("🚫 تم **إغلاق الدردشة**، لا يمكن للأعضاء الإرسال الآن.")
         except Exception:
@@ -89,6 +90,7 @@ async def locks_control_handler(event):
             
     elif msg == "فتح الدردشة":
         try:
+            # إعادة تفعيل صلاحية الإرسال للجميع
             await client.edit_permissions(event.chat_id, send_messages=True)
             await event.respond("✅ تم **فتح الدردشة** للجميع.")
         except Exception:
