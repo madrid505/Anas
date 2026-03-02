@@ -127,6 +127,16 @@ async def reactive_replies(event):
         else:
             await event.reply(f"مساء النور والسرور يا {user_title} ✨ نورت المجموعة.")
 
+    # --- الردود التلقائية الجديدة التي طلبتها ---
+    elif msg_text in ["هههه", "ههههه", "هههههه"]:
+        await event.reply(random.choice(["جعلها دوم هالضحكة! 😂", "ضحكتك تنور الجروب 🌸", "يا رب دائماً مبسوط ✨"]))
+    elif msg_text == "منور":
+        await event.reply(f"النور نورك يا {user_title} بنعكس عليك! 💡")
+    elif msg_text in ["شكرا", "مشكور", "يسلمو"]:
+        await event.reply(f"العفو يا طيب، واجبنا خدمتك دائماً 🌹")
+    elif msg_text == "تصبح على خير":
+        await event.reply(f"وأنت من أهل الخير يا {user_title}، أحلام سعيدة ونوم العوافي 💤")
+
 # --- 5. معالج الرسائل والأوامر الرئيسي ---
 @client.on(events.NewMessage(chats=ALLOWED_GROUPS))
 async def main_handler(event):
@@ -138,7 +148,7 @@ async def main_handler(event):
     if not event.is_private:
         db.increase_messages(chat_id, sender_id)
 
-    # 2. نظام الردود المبرمجة (أضف رد)
+    # 2. نظام الردود المبرمجة (أضف رد) - تم وضعه هنا لضمان الأولوية
     custom_reply = db.get_reply_data(chat_id, message)
     if custom_reply:
         rep_text, media_id = custom_reply
@@ -221,28 +231,34 @@ async def main_handler(event):
     if not await check_privilege(event, "مدير"):
         return
 
-    # 6. نظام "أضف رد" المطور (بدون تداخل)
+    # 6. نظام "أضف رد" المطور
     if message == "اضف رد":
         try:
             async with client.conversation(event.chat_id, timeout=60) as conv:
                 await conv.send_message("📝 **أهلاً بك يا مدير!**\nأرسل الآن **الكلمة** التي تريد الرد عليها:")
                 response_word = await conv.get_response()
-                # ضمان أن البوت لا يسمع إلا صاحب الأمر
-                if response_word.sender_id != sender_id:
-                     return 
-                
+                if response_word.sender_id != sender_id: return 
                 word_to_save = response_word.text
                 await conv.send_message(f"✅ ممتاز، الآن أرسل **الرد** (نص، صورة، ملصق) لـ '{word_to_save}':")
                 response_val = await conv.get_response()
-                if response_val.sender_id != sender_id:
-                     return
-
+                if response_val.sender_id != sender_id: return
                 db.set_reply(chat_id, word_to_save, response_val.text if response_val.text else "", response_val.media)
                 await conv.send_message("تمت اضافة الرد بنجاح يا مديرنا الغالي 👑")
         except asyncio.TimeoutError:
             await event.reply("⚠️ انتهى الوقت، يرجى إعادة المحاولة.")
-        except Exception as e_conv:
-            print(f"Error in convo: {e_conv}")
+
+    # --- أمر حذف رد الجديد (لكل المدراء) ---
+    if message == "حذف رد":
+        try:
+            async with client.conversation(event.chat_id, timeout=60) as conv:
+                await conv.send_message("🗑️ **أهلاً بك يا مدير!**\nأرسل الآن **الكلمة** التي تريد حذف ردها المبرمج:")
+                response_word = await conv.get_response()
+                if response_word.sender_id != sender_id: return 
+                db.cursor.execute("DELETE FROM replies WHERE chat_id = ? AND word = ?", (chat_id, response_word.text))
+                db.conn.commit()
+                await conv.send_message(f"✅ تم حذف الرد على الكلمة '{response_word.text}' بنجاح.")
+        except asyncio.TimeoutError:
+            await event.reply("⚠️ انتهى الوقت.")
 
     # 7. أوامر التحكم بالرسائل والرتب (بالرد)
     if event.is_reply:
@@ -307,7 +323,7 @@ import ranks, locks, tag, callbacks, cleaner
 client.loop.create_task(weekly_auto_reset())
 
 # بدء التشغيل النهائي
-print("--- [Monopoly System Online - V6.0 Royal Edition] ---")
-print("--- [Status: Fixed | Ranks: Integrated] ---")
+print("--- [Monopoly System Online - V7.0 Royal Edition] ---")
+print("--- [Status: Complete | All Functions Integrated] ---")
 
 client.run_until_disconnected()
