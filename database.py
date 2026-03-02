@@ -1,4 +1,5 @@
 import sqlite3
+import pickle
 
 class BotDB:
     def __init__(self, db_file="bot_ton.db"):
@@ -9,7 +10,8 @@ class BotDB:
     def create_tables(self):
         self.cursor.execute('CREATE TABLE IF NOT EXISTS ranks (gid TEXT, uid TEXT, rank TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS locks (gid TEXT, feature TEXT, status INTEGER DEFAULT 0)')
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id TEXT DEFAULT NULL)')
+        # تم تغيير نوع media_id ليدعم البيانات الثنائية BLOB لضمان حفظ الصور والملصقات بدقة
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS replies (gid TEXT, word TEXT, reply TEXT, media_id BLOB DEFAULT NULL)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS settings (gid TEXT, key TEXT, value TEXT)')
         self.cursor.execute('CREATE TABLE IF NOT EXISTS activity (gid TEXT, uid TEXT, count INTEGER DEFAULT 0, PRIMARY KEY(gid, uid))')
         self.conn.commit()
@@ -53,11 +55,10 @@ class BotDB:
         return row[0] == 1 if row else False
 
     def set_reply(self, gid, word, reply_text, media_id=None):
-        # حذف الرد القديم لضمان عدم التكرار
         self.cursor.execute("DELETE FROM replies WHERE gid=? AND word=?", (str(gid), word))
-        # التعديل الملكي: تحويل الميديا إلى نص صريح لتقبله قاعدة البيانات (SQLite)
-        m_id = str(media_id) if media_id else None
-        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, m_id))
+        # الإصلاح: حفظ الميديا كبيانات ثنائية (Serialized) لضمان استعادتها ككائن ميديا أصلي
+        m_data = pickle.dumps(media_id) if media_id else None
+        self.cursor.execute("INSERT INTO replies (gid, word, reply, media_id) VALUES (?, ?, ?, ?)", (str(gid), word, reply_text, m_data))
         self.conn.commit()
 
     def delete_reply(self, gid, word):
@@ -66,7 +67,13 @@ class BotDB:
 
     def get_reply_data(self, gid, word):
         self.cursor.execute("SELECT reply, media_id FROM replies WHERE gid=? AND word=?", (str(gid), word))
-        return self.cursor.fetchone()
+        row = self.cursor.fetchone()
+        if row:
+            # الإصلاح: استعادة الميديا لصيغتها الأصلية قبل إرسالها للـ main.py
+            reply_text, m_data = row
+            media_obj = pickle.loads(m_data) if m_data else None
+            return reply_text, media_obj
+        return None
 
     def set_setting(self, gid, key, value):
         self.cursor.execute("INSERT OR REPLACE INTO settings (gid, key, value) VALUES (?, ?, ?)", (str(gid), key, value))
